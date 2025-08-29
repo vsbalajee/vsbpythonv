@@ -1,12 +1,526 @@
 """
 Scaffold generation utilities for Vsbvibe
-Generates production-ready Streamlit applications from UI/UX plans
+Generates production-ready applications from UI/UX plans with platform awareness
 """
 
 import os
 import json
+import shutil
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from .utils import ensure_directory, save_json
+
+class ScaffoldGenerator:
+    """Platform-aware scaffold generator"""
+    
+    def __init__(self, project_config: Dict[str, Any], plan: Dict[str, Any], options: Dict[str, Any] = None):
+        self.project_config = project_config
+        self.plan = plan
+        self.options = options or {}
+        self.project_path = project_config.get("local_folder", "")
+        self.project_name = project_config.get("project_name", "website")
+        
+    def generate(self) -> Dict[str, Any]:
+        """Generate scaffold based on platform target"""
+        
+        platform_target = self.plan.get("platform_target")
+        
+        if platform_target == "streamlit_site":
+            return self._generate_streamlit_scaffold()
+        elif platform_target == "htmljs":
+            return self._generate_htmljs_scaffold()
+        elif platform_target == "reactvite":
+            return self._generate_reactvite_handoff()
+        else:
+            return {"success": False, "error": f"Unknown platform target: {platform_target}"}
+    
+    def _generate_streamlit_scaffold(self) -> Dict[str, Any]:
+        """Generate Streamlit scaffold"""
+        
+        try:
+            # Create output directory
+            output_path = os.path.join(self.project_path, self.project_name.lower().replace(" ", "-"), "output", "streamlit_site")
+            ensure_directory(output_path)
+            
+            files_created = []
+            
+            # Generate main app
+            app_content = self._generate_streamlit_app()
+            app_path = os.path.join(output_path, "app.py")
+            with open(app_path, 'w') as f:
+                f.write(app_content)
+            files_created.append("app.py")
+            
+            # Generate pages
+            pages_path = os.path.join(output_path, "pages")
+            ensure_directory(pages_path)
+            
+            for i, page in enumerate(self.plan.get("pages", [])):
+                page_content = self._generate_streamlit_page(page)
+                page_filename = f"{i:02d}_{page.get('name', 'Page').replace(' ', '_')}.py"
+                page_file_path = os.path.join(pages_path, page_filename)
+                
+                with open(page_file_path, 'w') as f:
+                    f.write(page_content)
+                files_created.append(f"pages/{page_filename}")
+            
+            # Generate components
+            components_path = os.path.join(output_path, "components")
+            ensure_directory(components_path)
+            
+            components = self._generate_streamlit_components()
+            for component_name, component_content in components.items():
+                component_path = os.path.join(components_path, component_name)
+                with open(component_path, 'w') as f:
+                    f.write(component_content)
+                files_created.append(f"components/{component_name}")
+            
+            # Generate styles
+            styles_path = os.path.join(output_path, "styles")
+            ensure_directory(styles_path)
+            
+            # Generate tokens
+            tokens = self._generate_design_tokens()
+            tokens_path = os.path.join(styles_path, "tokens.json")
+            save_json(tokens_path, tokens)
+            files_created.append("styles/tokens.json")
+            
+            # Generate style injector
+            inject_content = self._generate_style_injector()
+            inject_path = os.path.join(styles_path, "inject.py")
+            with open(inject_path, 'w') as f:
+                f.write(inject_content)
+            files_created.append("styles/inject.py")
+            
+            # Generate SEO utilities
+            if self.options.get("include_seo", True):
+                seo_path = os.path.join(output_path, "seo")
+                ensure_directory(seo_path)
+                
+                seo_files = self._generate_seo_utilities()
+                for seo_name, seo_content in seo_files.items():
+                    seo_file_path = os.path.join(seo_path, seo_name)
+                    with open(seo_file_path, 'w') as f:
+                        f.write(seo_content)
+                    files_created.append(f"seo/{seo_name}")
+            
+            # Generate preview instructions
+            preview_instructions = self._generate_preview_instructions("streamlit_site")
+            preview_path = os.path.join(self.project_path, self.project_name.lower().replace(" ", "-"), "_vsbvibe", "preview.json")
+            save_json(preview_path, preview_instructions)
+            
+            # Create diff summary
+            self._create_diff_summary(files_created, [])
+            
+            # Log scaffold generation
+            self._log_scaffold_generation("streamlit_site", len(files_created))
+            
+            return {
+                "success": True,
+                "platform": "streamlit_site",
+                "files_created": files_created,
+                "output_path": output_path
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _generate_streamlit_app(self) -> str:
+        """Generate main Streamlit app"""
+        
+        return f'''"""
+{self.project_config.get('project_name', 'Website')} - Main Application
+Generated by Vsbvibe
+"""
+
+import streamlit as st
+import sys
+import os
+
+# Add components to path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'components'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'styles'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'seo'))
+
+from nav import render_navigation
+from footer import render_footer
+from inject import inject_global_styles
+
+# Page configuration
+st.set_page_config(
+    page_title="{self.project_config.get('project_name', 'Website')}",
+    page_icon="🚀",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+def main():
+    """Main application entry point"""
+    
+    # Inject global styles
+    inject_global_styles()
+    
+    # Render navigation
+    render_navigation()
+    
+    # Main content
+    st.title("Welcome to {self.project_config.get('company_name', 'Our Company')}")
+    st.write("Your website is ready! Navigate using the pages in the sidebar.")
+    
+    # Render footer
+    render_footer()
+
+if __name__ == "__main__":
+    main()
+'''
+    
+    def _generate_streamlit_page(self, page: Dict[str, Any]) -> str:
+        """Generate individual Streamlit page"""
+        
+        page_name = page.get("name", "Page")
+        page_type = page.get("type", "generic")
+        
+        return f'''"""
+{page_name} Page - {self.project_config.get('project_name', 'Website')}
+Generated by Vsbvibe
+"""
+
+import streamlit as st
+import sys
+import os
+
+# Add components to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'components'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'styles'))
+
+from nav import render_navigation
+from footer import render_footer
+from inject import inject_global_styles
+
+# Page configuration
+st.set_page_config(
+    page_title="{page_name} - {self.project_config.get('project_name', 'Website')}",
+    page_icon="🚀",
+    layout="wide"
+)
+
+def main():
+    """Main page function"""
+    
+    # Inject global styles
+    inject_global_styles()
+    
+    # Render navigation
+    render_navigation()
+    
+    # Page content
+    st.title("{page_name}")
+    st.write("Welcome to the {page_name.lower()} page.")
+    
+    # TODO: Add page-specific content in Step 5
+    st.info("Page content will be added in Step 5 - Data & Products")
+    
+    # Render footer
+    render_footer()
+
+if __name__ == "__main__":
+    main()
+'''
+    
+    def _generate_streamlit_components(self) -> Dict[str, str]:
+        """Generate Streamlit components"""
+        
+        components = {}
+        
+        # Navigation component
+        nav_items = self.plan.get("navigation", {}).get("header", [])
+        
+        components["nav.py"] = f'''"""
+Navigation component
+"""
+
+import streamlit as st
+
+def render_navigation():
+    """Render main navigation"""
+    
+    # Navigation bar
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        st.markdown(f"**{self.project_config.get('company_name', 'Company')}**")
+    
+    with col2:
+        nav_cols = st.columns(len({nav_items}) if {nav_items} else 3)
+        
+        nav_items_list = {nav_items} if {nav_items} else [
+            {{"name": "Home", "url": "/"}},
+            {{"name": "About", "url": "/about"}},
+            {{"name": "Contact", "url": "/contact"}}
+        ]
+        
+        for i, item in enumerate(nav_items_list):
+            with nav_cols[i]:
+                if st.button(item.get("name", "Link"), key=f"nav_{{i}}"):
+                    st.info(f"Navigation to {{item.get('name', 'Page')}}")
+'''
+        
+        # Footer component
+        components["footer.py"] = f'''"""
+Footer component
+"""
+
+import streamlit as st
+
+def render_footer():
+    """Render site footer"""
+    
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.subheader("{self.project_config.get('company_name', 'Company')}")
+        st.write("Your trusted partner for professional services.")
+    
+    with col2:
+        st.subheader("Quick Links")
+        st.markdown("- [Home](/)\\n- [About](/about)\\n- [Contact](/contact)")
+    
+    with col3:
+        st.subheader("Contact")
+        st.write("Email: info@company.com\\nPhone: (555) 123-4567")
+    
+    # Copyright
+    st.markdown("---")
+    st.markdown(
+        f"<div style='text-align: center; color: #6c757d;'>"
+        f"© 2024 {self.project_config.get('company_name', 'Company')}. All rights reserved."
+        f"</div>", 
+        unsafe_allow_html=True
+    )
+'''
+        
+        return components
+    
+    def _generate_design_tokens(self) -> Dict[str, Any]:
+        """Generate design tokens"""
+        
+        brand_tokens = self.plan.get("brand_tokens", {})
+        
+        return {
+            "colors": {
+                "primary": brand_tokens.get("primary_color", "#2563eb"),
+                "secondary": brand_tokens.get("secondary_color", "#64748b"),
+                "accent": brand_tokens.get("accent_color", "#10b981"),
+                "success": "#10b981",
+                "warning": "#f59e0b",
+                "error": "#ef4444",
+                "info": "#3b82f6"
+            },
+            "typography": {
+                "font_family": brand_tokens.get("font_family", "Inter, sans-serif"),
+                "font_sizes": {
+                    "xs": "0.75rem",
+                    "sm": "0.875rem", 
+                    "base": "1rem",
+                    "lg": "1.125rem",
+                    "xl": "1.25rem",
+                    "2xl": "1.5rem"
+                }
+            },
+            "spacing": {
+                "xs": "0.25rem",
+                "sm": "0.5rem",
+                "md": "1rem", 
+                "lg": "1.5rem",
+                "xl": "2rem"
+            }
+        }
+    
+    def _generate_style_injector(self) -> str:
+        """Generate CSS injection utility"""
+        
+        brand_tokens = self.plan.get("brand_tokens", {})
+        primary_color = brand_tokens.get("primary_color", "#2563eb")
+        
+        return f'''"""
+Global style injection for Streamlit
+"""
+
+import streamlit as st
+import json
+import os
+
+def inject_global_styles():
+    """Inject global CSS styles"""
+    
+    css = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    .main .block-container {{
+        padding-top: 2rem;
+        max-width: 1200px;
+    }}
+    
+    .stButton > button[kind="primary"] {{
+        background-color: {primary_color};
+        border-color: {primary_color};
+        color: white;
+        border-radius: 8px;
+        font-weight: 500;
+    }}
+    
+    .stButton > button[kind="primary"]:hover {{
+        background-color: {primary_color}dd;
+        transform: translateY(-1px);
+    }}
+    </style>
+    """
+    
+    st.markdown(css, unsafe_allow_html=True)
+'''
+    
+    def _generate_seo_utilities(self) -> Dict[str, str]:
+        """Generate SEO utility files"""
+        
+        seo_files = {}
+        
+        # JSON-LD utility
+        seo_files["jsonld.py"] = '''"""
+JSON-LD schema markup utilities
+"""
+
+import json
+from typing import Dict, Any
+
+def generate_organization_schema(name: str, url: str) -> Dict[str, Any]:
+    """Generate Organization schema"""
+    return {
+        "@context": "https://schema.org",
+        "@type": "Organization", 
+        "name": name,
+        "url": url
+    }
+
+def generate_website_schema(name: str, url: str) -> Dict[str, Any]:
+    """Generate Website schema"""
+    return {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": name,
+        "url": url
+    }
+'''
+        
+        # Sitemap utility
+        seo_files["sitemap.py"] = '''"""
+Sitemap generation utilities
+"""
+
+from datetime import datetime
+from typing import List, Dict, Any
+
+def generate_sitemap_xml(pages: List[Dict[str, Any]], base_url: str = "https://example.com") -> str:
+    """Generate sitemap.xml content"""
+    
+    xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+'''
+    
+    for page in pages:
+        url = page.get("slug", "/")
+        if not url.startswith("http"):
+            url = base_url.rstrip("/") + url
+        
+        xml_content += f'''
+    <url>
+        <loc>{url}</loc>
+        <lastmod>{datetime.now().strftime("%Y-%m-%d")}</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>{"1.0" if page.get("slug") == "/" else "0.8"}</priority>
+    </url>'''
+    
+    xml_content += '''
+</urlset>'''
+    
+    return xml_content
+'''
+        
+        return seo_files
+    
+    def _generate_preview_instructions(self, platform: str) -> Dict[str, Any]:
+        """Generate preview instructions"""
+        
+        if platform == "streamlit_site":
+            return {
+                "platform": "streamlit_site",
+                "instructions": [
+                    "Navigate to the output/streamlit_site directory",
+                    "Run: streamlit run app.py",
+                    "Open browser to http://localhost:8501",
+                    "Use sidebar navigation to view different pages"
+                ],
+                "requirements": ["streamlit>=1.29.0", "pandas>=2.0.0"],
+                "notes": "Ensure all dependencies are installed before running"
+            }
+        
+        return {"platform": platform, "instructions": [], "requirements": [], "notes": ""}
+    
+    def _create_diff_summary(self, files_created: List[str], files_updated: List[str]):
+        """Create diff summary"""
+        
+        diff_summary = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": "scaffold_generation",
+            "platform": self.plan.get("platform_target"),
+            "files_created": files_created,
+            "files_updated": files_updated,
+            "total_files": len(files_created) + len(files_updated),
+            "summary": f"Generated {len(files_created)} files for {self.plan.get('platform_target')} platform"
+        }
+        
+        diff_path = os.path.join(
+            self.project_path, 
+            self.project_name.lower().replace(" ", "-"),
+            "_vsbvibe", 
+            "diff_summary.json"
+        )
+        
+        save_json(diff_path, diff_summary)
+    
+    def _log_scaffold_generation(self, platform: str, files_count: int):
+        """Log scaffold generation"""
+        
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "event": "scaffold_generated",
+            "platform": platform,
+            "files_count": files_count,
+            "project": self.project_config.get("project_name")
+        }
+        
+        log_path = os.path.join(
+            self.project_path,
+            self.project_name.lower().replace(" ", "-"),
+            "_vsbvibe", 
+            "logs", 
+            "scaffold.log"
+        )
+        
+        ensure_directory(os.path.dirname(log_path))
+        
+        with open(log_path, 'a') as f:
+            f.write(json.dumps(log_entry) + "\\n")
+    
+    def _generate_htmljs_scaffold(self) -> Dict[str, Any]:
+        """Generate HTML/JS scaffold (placeholder)"""
+        return {"success": False, "error": "HTML/JS scaffold not implemented yet"}
+    
+    def _generate_reactvite_handoff(self) -> Dict[str, Any]:
+        """Generate React/Vite handoff (placeholder)"""
+        return {"success": False, "error": "React/Vite handoff not implemented yet"}
 
 def generate_main_app(plan: Dict[str, Any], project_config: Dict[str, Any]) -> str:
     """Generate the main Streamlit app.py file"""
