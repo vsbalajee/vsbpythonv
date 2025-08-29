@@ -603,7 +603,7 @@ class AdminInterface:
         else:
             public_path = os.path.join(project_path, "output", platform_target, "public")
         
-        ensure_directory(public_path)
+        os.makedirs(public_path, exist_ok=True)
         
         if file_type == "sitemap":
             # Generate sitemap.xml
@@ -666,82 +666,6 @@ Disallow: *.log$
 """
         
         return robots_content
-                
-                color_scheme = st.selectbox("Color Scheme",
-                                          ["professional", "vibrant", "monochrome", "warm"],
-                                          index=["professional", "vibrant", "monochrome", "warm"].index(
-                                              ui_plan.get("color_scheme", "professional")
-                                          ))
-            
-            with col2:
-                navigation = st.selectbox("Navigation Style",
-                                        ["header", "sidebar", "footer", "floating"],
-                                        index=["header", "sidebar", "footer", "floating"].index(
-                                            ui_plan.get("navigation", "header")
-                                        ))
-                
-                components = st.multiselect("Components",
-                                          ["hero", "features", "testimonials", "gallery", "contact", "blog"],
-                                          default=ui_plan.get("components", ["hero", "features", "contact"]))
-            
-            if st.form_submit_button("Update Design"):
-                plan["ui_ux_plan"] = {
-                    "layout": layout,
-                    "color_scheme": color_scheme,
-                    "navigation": navigation,
-                    "components": components,
-                    "updated_at": datetime.now().isoformat()
-                }
-                
-                with open(plan_path, 'w') as f:
-                    json.dump(plan, f, indent=2)
-                
-                st.success("Design settings updated!")
-    
-    def _render_products(self):
-        st.subheader("Products CRUD")
-        
-        products_path = os.path.join(
-            self.project_manager.get_current_project_path(),
-            "content", "products.xlsx"
-        )
-        
-        # Load products
-        if os.path.exists(products_path):
-            df = pd.read_excel(products_path)
-            
-            # Display products
-            st.write("**Current Products:**")
-            edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Save Changes"):
-                    edited_df.to_excel(products_path, index=False)
-                    st.success("Products saved successfully!")
-            
-            with col2:
-                if st.button("Add Sample Product"):
-                    new_row = pd.DataFrame({
-                        "Product Name": ["New Product"],
-                        "Description": ["Product description"],
-                        "Price": [0.00],
-                        "Category": ["Uncategorized"]
-                    })
-                    updated_df = pd.concat([df, new_row], ignore_index=True)
-                    updated_df.to_excel(products_path, index=False)
-                    st.rerun()
-        else:
-            st.warning("Products file not found. Creating sample file...")
-            sample_data = {
-                "Product Name": ["Sample Product"],
-                "Description": ["A sample product"],
-                "Price": [99.99],
-                "Category": ["Sample"]
-            }
-            df = pd.DataFrame(sample_data)
-            df.to_excel(products_path, index=False)
-            st.rerun()
     
     @safe_page
     def _render_data(self):

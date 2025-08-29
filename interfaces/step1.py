@@ -4,10 +4,16 @@ Step 1 Interface - Project Setup & Requirements
 
 import streamlit as st
 import os
+import re
 from datetime import datetime
 from modules.project_manager import ProjectManager
 from core.state import save_form_data, get_form_data, set_project_state
 from core.telemetry import log_user_action
+
+def _slugify(name: str) -> str:
+    """Convert project name to URL-safe slug"""
+    s = re.sub(r"[^a-zA-Z0-9_-]+", "-", name.strip()).strip("-")
+    return s.lower() or "project"
 
 def render_step1_interface():
     """Render Step 1 - Project Setup & Requirements"""
@@ -48,11 +54,17 @@ def render_step1_interface():
                 placeholder="Your Company Name"
             )
             
-            local_folder = st.text_input(
-                "Local Folder Path *",
-                value=form_data.get("local_folder", os.path.expanduser("~/vsbvibe-projects")),
-                help="Where to save your project files"
+            # Auto-generate project folder
+            project_slug = _slugify(project_name or "project")
+            default_folder = os.path.join("_vsbvibe", "projects", project_slug)
+            os.makedirs(default_folder, exist_ok=True)
+            
+            st.text_input(
+                "Local Folder Path",
+                value=default_folder,
+                disabled=True
             )
+            st.caption("The project folder is auto-created under `_vsbvibe/projects/<project_slug>`.")
         
         with col2:
             reference_url = st.text_input(
@@ -119,7 +131,7 @@ Example: "I need an e-commerce website for selling handmade jewelry. Target audi
                 # Process form submission
                 success = _process_project_creation(
                     project_name, company_name, reference_url, requirements,
-                    content_mode, local_folder, logo_file, screenshot_files
+                    content_mode, default_folder, logo_file, screenshot_files
                 )
                 
                 if success:
