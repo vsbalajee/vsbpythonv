@@ -7,6 +7,58 @@ from typing import Dict, Any
 import shutil
 from site.core.errors import safe_page, safe_component
 from .template_generator import TemplateGenerator
+from modules.project_manager import ProjectManager
+
+__all__ = ["render_admin_interface"]
+
+@safe_page
+def render_admin_interface():
+    """Render Admin Interface"""
+    pm = ProjectManager()
+    
+    st.title("Admin Interface")
+    
+    # --- Sidebar: Theme / Quick Actions ---
+    with st.sidebar:
+        st.subheader("Theme")
+        color_scheme = st.selectbox("Color scheme", ["System", "Light", "Dark"], index=0)
+        st.caption("Switch theme appearance for preview only.")
+    
+    # --- Tabs layout ---
+    tab_req, tab_keys, tab_products, tab_errors, tab_tests = st.tabs(
+        ["Requirements", "Models & Keys", "Products", "Errors", "Tests"]
+    )
+    
+    # Requirements (hook up to existing implementation)
+    with tab_req:
+        st.subheader("Requirements (versioned)")
+        admin = AdminInterface(pm)
+        admin._render_requirements()
+    
+    # Keys (OpenAI, Supabase, GitHub) — non-persisted preview if needed
+    with tab_keys:
+        st.subheader("Models & Keys")
+        admin = AdminInterface(pm)
+        admin._render_models_keys()
+    
+    # Products admin (CRUD / import links)
+    with tab_products:
+        st.subheader("Products")
+        admin = AdminInterface(pm)
+        admin._render_products_enhanced()
+    
+    # Errors panel (Excel + logs)
+    with tab_errors:
+        st.subheader("Errors & Logs")
+        st.write("Download Excel error report or view recent errors.")
+        admin = AdminInterface(pm)
+        admin._render_errors()
+    
+    # Tests
+    with tab_tests:
+        st.subheader("Test Module")
+        admin = AdminInterface(pm)
+        admin._render_tests()
 
 class AdminInterface:
     def __init__(self, project_manager):
