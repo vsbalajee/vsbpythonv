@@ -109,8 +109,8 @@ def render_step3():
 
 def render_step4():
     """Render Step 4 - Content Import"""
-    st.header("📄 Step 4: Content Import")
-    st.info("Step 4 implementation coming soon...")
+    from interfaces.step4 import render_step4_interface
+    render_step4_interface()
 
 def render_step5():
     """Render Step 5 - Data & Products"""

@@ -10,7 +10,9 @@ from modules.project_manager import ProjectManager
 from modules.scaffold_generator import ScaffoldGenerator
 from core.state import get_session_state
 from core.telemetry import log_user_action
+from site.core.errors import safe_page, safe_component
 
+@safe_page
 def render_step3_interface():
     """Render Step 3 - Generate Scaffold"""
     
@@ -90,22 +92,7 @@ def render_step3_interface():
     st.subheader("🧪 Error Reporting Test")
     
     if st.button("Test Error Capture"):
-        try:
-            from site.core.errors import error_reporter
-            
-            # Generate test error
-            test_error = ValueError("Test error for system validation")
-            error_id = error_reporter.capture_error(test_error, {
-                "module": "test",
-                "function": "step3_validation",
-                "test_type": "synthetic"
-            })
-            
-            st.success(f"✅ Error captured successfully! Error ID: {error_id}")
-            st.info("Check Admin → Errors panel to see the captured error.")
-            
-        except Exception as e:
-            st.error(f"Error testing system failed: {e}")
+        _test_error_capture()
     
     st.markdown("---")
     
@@ -152,6 +139,27 @@ def render_step3_interface():
             })
             st.rerun()
 
+@safe_component
+def _test_error_capture():
+    """Test error capture system"""
+    try:
+        from site.core.errors import error_reporter
+        
+        # Generate test error
+        test_error = ValueError("Test error for system validation")
+        error_id = error_reporter.capture_error(test_error, {
+            "module": "test",
+            "function": "step3_validation", 
+            "test_type": "synthetic"
+        })
+        
+        st.success(f"✅ Error captured successfully! Error ID: {error_id}")
+        st.info("Check Admin → Errors panel to see the captured error.")
+        
+    except Exception as e:
+        st.error(f"Error testing system failed: {e}")
+
+@safe_component
 def _display_generated_files(output_path: str):
     """Display generated files in tree structure"""
     
@@ -174,6 +182,7 @@ def _display_generated_files(output_path: str):
     else:
         st.info("No files found in output directory")
 
+@safe_component
 def _generate_scaffold(project_path: str, plan: dict, options: dict = None):
     """Generate scaffold based on plan"""
     

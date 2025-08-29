@@ -5,6 +5,8 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, Any
 import shutil
+from site.core.errors import safe_page, safe_component
+from .template_generator import TemplateGenerator
 
 class AdminInterface:
     def __init__(self, project_manager):
@@ -32,7 +34,7 @@ class AdminInterface:
             self._render_design()
         
         with admin_tabs[4]:
-            self._render_products()
+            self._render_products_enhanced()
         
         with admin_tabs[5]:
             self._render_data()
@@ -49,13 +51,14 @@ class AdminInterface:
         with admin_tabs[9]:
             self._render_jobs_logs()
         
-        # Add Errors tab
-        with st.tabs(["Errors"])[0]:
+        # Errors tab
+        with st.tabs(["Errors"])[0] if len(st.tabs(["Errors"])) > 0 else st.container():
             self._render_errors()
         
         # Admin Chat at the bottom
         self._render_admin_chat()
     
+    @safe_page
     def _render_requirements(self):
         st.subheader("Requirements Management")
         
@@ -87,6 +90,7 @@ class AdminInterface:
                     st.success("Requirements updated successfully!")
                     st.rerun()
     
+    @safe_page
     def _render_models_keys(self):
         st.subheader("AI Models & API Keys")
         
@@ -132,93 +136,484 @@ class AdminInterface:
                 
                 st.success("Settings saved successfully!")
     
+    @safe_page
     def _render_pages(self):
-        st.subheader("Pages Management")
+        st.subheader("📄 Pages Management")
         
         plan_path = os.path.join(
             self.project_manager.get_current_project_path(), 
             "_vsbvibe", "plan.json"
         )
         
-        plan = {}
-        if os.path.exists(plan_path):
-            with open(plan_path, 'r') as f:
-                plan = json.load(f)
-        
-        pages = plan.get("pages", [])
-        
-        # Display existing pages
-        if pages:
-            st.write("**Current Pages:**")
-            for i, page in enumerate(pages):
-                col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
-                with col1:
-                    st.write(page.get("name", ""))
-                with col2:
-                    st.write(page.get("type", ""))
-                with col3:
-                    st.write(f"Priority: {page.get('priority', 0)}")
-                with col4:
-                    if st.button("Remove", key=f"remove_page_{i}"):
-                        pages.pop(i)
-                        plan["pages"] = pages
-                        with open(plan_path, 'w') as f:
-                            json.dump(plan, f, indent=2)
-                        st.rerun()
-        
-        # Add new page
-        with st.form("add_page"):
-            st.write("**Add New Page:**")
-            col1, col2, col3 = st.columns(3)
+        try:
+            plan = {}
+            if os.path.exists(plan_path):
+                with open(plan_path, 'r') as f:
+                    plan = json.load(f)
             
-            with col1:
-                page_name = st.text_input("Page Name")
-            with col2:
-                page_type = st.selectbox("Type", ["landing", "info", "form", "gallery", "blog"])
-            with col3:
-                priority = st.number_input("Priority", min_value=1, value=len(pages) + 1)
+            pages = plan.get("pages", [])
             
-            if st.form_submit_button("Add Page"):
-                if page_name:
-                    new_page = {
-                        "name": page_name,
-                        "type": page_type,
-                        "priority": priority,
-                        "created_at": datetime.now().isoformat()
-                    }
-                    pages.append(new_page)
-                    plan["pages"] = pages
-                    
-                    with open(plan_path, 'w') as f:
-                        json.dump(plan, f, indent=2)
-                    
-                    st.success(f"Page '{page_name}' added successfully!")
-                    st.rerun()
-    
-    def _render_design(self):
-        st.subheader("Design Settings")
-        
-        plan_path = os.path.join(
-            self.project_manager.get_current_project_path(), 
-            "_vsbvibe", "plan.json"
-        )
-        
-        plan = {}
-        if os.path.exists(plan_path):
-            with open(plan_path, 'r') as f:
-                plan = json.load(f)
-        
-        ui_plan = plan.get("ui_ux_plan", {})
-        
-        with st.form("design_settings"):
+            if pages:
+                st.write("**Planned Pages:**")
+                
+                # Create enhanced pages display
+                for i, page in enumerate(pages):
+                    with st.expander(f"{page.get('name', 'Unknown')} ({page.get('slug', '/')})"):
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.write(f"**Type:** {page.get('type', 'unknown')}")
+                            st.write(f"**Priority:** {page.get('priority', 0)}")
+                        
+                        with col2:
+                            sections = page.get('sections', [])
+                            if sections:
+                                st.write("**Sections:**")
+                                for section in sections:
+                                    st.write(f"• {section}")
+                        
+                        with col3:
+                            # Check if page file exists
+                            platform_target = plan.get("platform_target", "streamlit_site")
+                            if platform_target == "streamlit_site":
+                                page_file = f"site/pages/{i:02d}_{page.get('name', 'Page').replace(' ', '_')}.py"
+                                project_path = self.project_manager.get_current_project_path()
+                                file_exists = os.path.exists(os.path.join(project_path, "output", platform_target, page_file))
+                                
+                                if file_exists:
+                                    st.success("✅ Generated")
+                                else:
+                                    st.warning("⏳ Pending")
+            
+            # Template management
+            st.markdown("---")
+            st.subheader("📋 Content Templates")
+            
+            project_path = self.project_manager.get_current_project_path()
+            
+            # Check for existing templates
+            products_path = os.path.join(project_path, "content", "products.xlsx")
+            pages_path = os.path.join(project_path, "content", "pages.xlsx")
+            
             col1, col2 = st.columns(2)
             
             with col1:
-                layout = st.selectbox("Layout Style", 
-                                    ["modern", "classic", "minimal", "bold"],
-                                    index=["modern", "classic", "minimal", "bold"].index(
-                                        ui_plan.get("layout", "modern")
-                                    ))
+                if plan.get("entities", {}).get("products", False):
+                    if os.path.exists(products_path):
+                        st.success("✅ Products template exists")
+                        if st.button("📥 Download products.xlsx"):
+                            with open(products_path, 'rb') as f:
+                                st.download_button(
+                                    "Download Products Template",
+                                    data=f.read(),
+                                    file_name="products.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
+                    else:
+                        if st.button("📋 Generate Products Template"):
+                            self._generate_templates()
+                            st.rerun()
+            
+            with col2:
+                brochure_pages = [p for p in pages if p.get('type') not in ['product_list', 'product_detail']]
+                if brochure_pages:
+                    if os.path.exists(pages_path):
+                        st.success("✅ Pages template exists")
+                        if st.button("📥 Download pages.xlsx"):
+                            with open(pages_path, 'rb') as f:
+                                st.download_button(
+                                    "Download Pages Template",
+                                    data=f.read(),
+                                    file_name="pages.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
+                    else:
+                        if st.button("📋 Generate Pages Template"):
+                            self._generate_templates()
+                            st.rerun()
+            
+            # Helper buttons
+            st.markdown("---")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📁 Open Images Folder"):
+                    images_path = os.path.join(project_path, "content", "images")
+                    st.info(f"Images folder: {images_path}")
+            
+            with col2:
+                samples_path = os.path.join(project_path, "content", "samples")
+                if os.path.exists(samples_path):
+                    if st.button("📊 View Sample Files"):
+                        st.info(f"Sample files location: {samples_path}")
+            
+            with col3:
+                if st.button("📖 View Import Guide"):
+                    readme_path = os.path.join(project_path, "content", "README_import.md")
+                    if os.path.exists(readme_path):
+                        with open(readme_path, 'r') as f:
+                            st.text_area("Import Guide", value=f.read(), height=300)
+        
+        except Exception as e:
+            st.error(f"Error loading pages: {e}")
+        
+    @safe_component
+    def _generate_templates(self):
+        """Generate Excel templates using TemplateGenerator"""
+        try:
+            template_generator = TemplateGenerator(self.project_manager)
+            results = template_generator.generate_templates()
+            
+            st.success(f"✅ Generated {results['templates_generated']} templates")
+            st.write("**Files Created:**")
+            for file_path in results["files_created"]:
+                st.write(f"• {file_path}")
+                
+        except Exception as e:
+            st.error(f"Error generating templates: {e}")
+    
+    @safe_page
+    def _render_products_enhanced(self):
+        st.subheader("🛍️ Products Management")
+        
+        project_path = self.project_manager.get_current_project_path()
+        products_path = os.path.join(project_path, "content", "products.xlsx")
+        
+        # Check if products are enabled in plan
+        plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
+        plan = {}
+        if os.path.exists(plan_path):
+            with open(plan_path, 'r') as f:
+                plan = json.load(f)
+        
+        products_enabled = plan.get("entities", {}).get("products", False)
+        
+        if not products_enabled:
+            st.info("Products not enabled for this project. Enable in Step 2 plan if needed.")
+            return
+        
+        # Template management
+        if os.path.exists(products_path):
+            st.success("✅ Products template exists")
+            
+            # Load and display products
+            try:
+                df = pd.read_excel(products_path)
+                
+                st.write("**Current Products:**")
+                edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button("💾 Save Changes"):
+                        edited_df.to_excel(products_path, index=False)
+                        st.success("Products saved successfully!")
+                
+                with col2:
+                    if st.button("📥 Download Template"):
+                        with open(products_path, 'rb') as f:
+                            st.download_button(
+                                "Download products.xlsx",
+                                data=f.read(),
+                                file_name="products.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                
+                with col3:
+                    if st.button("📁 Open Images Folder"):
+                        images_path = os.path.join(project_path, "content", "images")
+                        st.info(f"Images folder: {images_path}")
+                
+            except Exception as e:
+                st.error(f"Error loading products: {e}")
+        
+        else:
+            st.warning("Products template not found.")
+            
+            if st.button("📋 Generate Products Template"):
+                self._generate_templates()
+                st.rerun()
+        
+        # Sample files
+        sample_path = os.path.join(project_path, "content", "samples", "products_sample.csv")
+        if os.path.exists(sample_path):
+            with st.expander("📊 View Sample Data"):
+                sample_df = pd.read_csv(sample_path)
+                st.dataframe(sample_df, use_container_width=True)
+    
+    @safe_page
+    def _render_design(self):
+        st.subheader("🎨 Design Settings")
+        
+        plan_path = os.path.join(
+            self.project_manager.get_current_project_path(), 
+            "_vsbvibe", "plan.json"
+        )
+        
+        try:
+            plan = {}
+            if os.path.exists(plan_path):
+                with open(plan_path, 'r') as f:
+                    plan = json.load(f)
+            
+            # Display current brand tokens
+            brand_tokens = plan.get("brand_tokens", {})
+            
+            if brand_tokens:
+                st.write("**Current Brand Tokens:**")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    primary_color = brand_tokens.get("primary_color", "#2563eb")
+                    st.color_picker("Primary Color", value=primary_color, disabled=True)
+                
+                with col2:
+                    secondary_color = brand_tokens.get("secondary_color", "#64748b")
+                    st.color_picker("Secondary Color", value=secondary_color, disabled=True)
+                
+                with col3:
+                    accent_color = brand_tokens.get("accent_color", "#10b981")
+                    st.color_picker("Accent Color", value=accent_color, disabled=True)
+                
+                st.write(f"**Font Family:** {brand_tokens.get('font_family', 'Inter')}")
+                st.write(f"**Border Radius:** {brand_tokens.get('border_radius', '8px')}")
+                st.write(f"**Spacing Unit:** {brand_tokens.get('spacing_unit', '1rem')}")
+            
+            # Platform-specific design files
+            platform_target = plan.get("platform_target", "streamlit_site")
+            project_path = self.project_manager.get_current_project_path()
+            
+            st.markdown("---")
+            st.write("**Design Files:**")
+            
+            if platform_target == "streamlit_site":
+                tokens_path = os.path.join(project_path, "output", platform_target, "site", "styles", "tokens.json")
+                if os.path.exists(tokens_path):
+                    st.success("✅ styles/tokens.json exists")
+                    if st.button("👀 View Tokens File"):
+                        with open(tokens_path, 'r') as f:
+                            tokens_data = json.load(f)
+                        st.json(tokens_data)
+                else:
+                    st.warning("⏳ Tokens file not generated yet")
+            
+            elif platform_target == "htmljs":
+                css_path = os.path.join(project_path, "output", platform_target, "css", "main.css")
+                if os.path.exists(css_path):
+                    st.success("✅ css/main.css exists")
+                    if st.button("👀 View CSS File"):
+                        with open(css_path, 'r') as f:
+                            css_content = f.read()
+                        st.code(css_content, language="css")
+                else:
+                    st.warning("⏳ CSS file not generated yet")
+            
+            # UI/UX Plan display
+            ui_plan = plan.get("ui_ux_plan", {})
+            
+            if ui_plan:
+                st.markdown("---")
+                st.write("**UI/UX Plan:**")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**Layout:** {ui_plan.get('layout', 'modern')}")
+                    st.write(f"**Color Scheme:** {ui_plan.get('color_scheme', 'professional')}")
+                
+                with col2:
+                    st.write(f"**Target Audience:** {ui_plan.get('target_audience', 'general')}")
+                    features = ui_plan.get('features', [])
+                    if features:
+                        st.write(f"**Features:** {', '.join(features)}")
+        
+        except Exception as e:
+            st.error(f"Error loading design settings: {e}")
+        
+    @safe_page
+    def _render_generate(self):
+        st.subheader("⚙️ Site Generation")
+        
+        project_path = self.project_manager.get_current_project_path()
+        
+        # Load plan for platform info
+        plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
+        plan = {}
+        if os.path.exists(plan_path):
+            with open(plan_path, 'r') as f:
+                plan = json.load(f)
+        
+        platform_target = plan.get("platform_target", "streamlit_site")
+        site_mode = plan.get("site_mode", "brochure")
+        
+        # Display current configuration
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.info(f"**Platform:** {platform_target}")
+        
+        with col2:
+            st.info(f"**Site Mode:** {site_mode}")
+        
+        with col3:
+            pages_count = len(plan.get("pages", []))
+            st.info(f"**Pages:** {pages_count}")
+        
+        # Check for existing scaffold
+        output_path = os.path.join(project_path, "output", platform_target)
+        scaffold_exists = os.path.exists(output_path)
+        
+        if scaffold_exists:
+            st.success("✅ Scaffold generated")
+            
+            # Show diff summary
+            diff_path = os.path.join(project_path, "_vsbvibe", "diff_summary.json")
+            if os.path.exists(diff_path):
+                with st.expander("📋 View Generation Summary"):
+                    with open(diff_path, 'r') as f:
+                        diff_data = json.load(f)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Files Created:**")
+                        for file_path in diff_data.get("files_created", []):
+                            st.write(f"• {file_path}")
+                    
+                    with col2:
+                        st.write("**Files Updated:**")
+                        for file_path in diff_data.get("files_updated", []):
+                            st.write(f"• {file_path}")
+            
+            # Regeneration options
+            st.markdown("---")
+            st.write("**Regeneration Options:**")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("🔄 Regenerate Site"):
+                    self._regenerate_scaffold("site")
+            
+            with col2:
+                if st.button("📄 Regenerate Pages"):
+                    self._regenerate_scaffold("pages")
+            
+            with col3:
+                if st.button("🎨 Regenerate Styles"):
+                    self._regenerate_scaffold("styles")
+        
+        else:
+            st.warning("No scaffold generated yet")
+            
+            if st.button("⚙️ Generate Scaffold", type="primary"):
+                # This would trigger scaffold generation
+                st.info("Scaffold generation would be triggered here")
+        
+        # SEO Export Panel
+        st.markdown("---")
+        st.subheader("🔍 SEO Export Panel")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📄 Export Sitemap"):
+                self._export_seo_file("sitemap")
+        
+        with col2:
+            if st.button("🤖 Export Robots.txt"):
+                self._export_seo_file("robots")
+    
+    @safe_component
+    def _regenerate_scaffold(self, scope: str):
+        """Regenerate specific parts of scaffold"""
+        st.info(f"Regenerating {scope}...")
+        # Implementation would go here
+    
+    @safe_component
+    def _export_seo_file(self, file_type: str):
+        """Export SEO files to platform's public folder"""
+        project_path = self.project_manager.get_current_project_path()
+        
+        # Load plan for platform info
+        plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
+        plan = {}
+        if os.path.exists(plan_path):
+            with open(plan_path, 'r') as f:
+                plan = json.load(f)
+        
+        platform_target = plan.get("platform_target", "streamlit_site")
+        
+        # Determine public folder based on platform
+        if platform_target == "streamlit_site":
+            public_path = os.path.join(project_path, "output", platform_target, "_public")
+        else:
+            public_path = os.path.join(project_path, "output", platform_target, "public")
+        
+        ensure_directory(public_path)
+        
+        if file_type == "sitemap":
+            # Generate sitemap.xml
+            sitemap_content = self._generate_sitemap_xml(plan)
+            sitemap_path = os.path.join(public_path, "sitemap.xml")
+            
+            with open(sitemap_path, 'w') as f:
+                f.write(sitemap_content)
+            
+            st.success(f"✅ Sitemap exported to {sitemap_path}")
+        
+        elif file_type == "robots":
+            # Generate robots.txt
+            robots_content = self._generate_robots_txt()
+            robots_path = os.path.join(public_path, "robots.txt")
+            
+            with open(robots_path, 'w') as f:
+                f.write(robots_content)
+            
+            st.success(f"✅ Robots.txt exported to {robots_path}")
+    
+    def _generate_sitemap_xml(self, plan: Dict[str, Any]) -> str:
+        """Generate sitemap.xml content"""
+        
+        pages = plan.get("pages", [])
+        base_url = "https://yoursite.com"  # Would be configurable
+        
+        sitemap_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+        sitemap_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        
+        for page in pages:
+            slug = page.get("slug", "/")
+            if not slug.startswith("/"):
+                slug = "/" + slug
+            
+            sitemap_content += f'  <url>\n'
+            sitemap_content += f'    <loc>{base_url}{slug}</loc>\n'
+            sitemap_content += f'    <lastmod>{datetime.now().strftime("%Y-%m-%d")}</lastmod>\n'
+            sitemap_content += f'    <changefreq>weekly</changefreq>\n'
+            sitemap_content += f'    <priority>0.8</priority>\n'
+            sitemap_content += f'  </url>\n'
+        
+        sitemap_content += '</urlset>'
+        
+        return sitemap_content
+    
+    def _generate_robots_txt(self) -> str:
+        """Generate robots.txt content"""
+        
+        robots_content = """User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://yoursite.com/sitemap.xml
+
+# Disallow admin and private areas
+Disallow: /_vsbvibe/
+Disallow: /admin/
+Disallow: *.log$
+"""
+        
+        return robots_content
                 
                 color_scheme = st.selectbox("Color Scheme",
                                           ["professional", "vibrant", "monochrome", "warm"],
@@ -296,6 +691,7 @@ class AdminInterface:
             df.to_excel(products_path, index=False)
             st.rerun()
     
+    @safe_page
     def _render_data(self):
         st.subheader("Data Schema Management")
         
@@ -324,25 +720,7 @@ class AdminInterface:
             if st.button("Backup Data"):
                 st.info("Data backup will be implemented")
     
-    def _render_generate(self):
-        st.subheader("Site Generation")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("**Generation Options:**")
-            generate_content = st.checkbox("Generate AI Content", value=True)
-            generate_images = st.checkbox("Generate Images", value=False)
-            generate_seo = st.checkbox("Generate SEO Meta", value=True)
-            
-        with col2:
-            st.write("**Output Format:**")
-            output_format = st.selectbox("Format", ["Streamlit", "Static HTML"])
-            include_admin = st.checkbox("Include Admin Panel", value=True)
-        
-        if st.button("Generate Site", type="primary"):
-            self._generate_site(generate_content, generate_images, generate_seo, output_format, include_admin)
-    
+    @safe_page
     def _render_publish(self):
         st.subheader("Publish & Deploy")
         
@@ -364,10 +742,12 @@ class AdminInterface:
             if st.button("Deploy"):
                 st.info("Deployment will be implemented")
     
+    @safe_page
     def _render_tests(self):
         st.subheader("Testing Dashboard")
         st.info("See Test tab for detailed testing interface")
     
+    @safe_page
     def _render_jobs_logs(self):
         st.subheader("Jobs & Logs")
         
@@ -391,6 +771,7 @@ class AdminInterface:
         else:
             st.info("No logs found")
     
+    @safe_page
     def _render_errors(self):
         st.subheader("🚨 Error Management")
         
@@ -451,10 +832,12 @@ class AdminInterface:
                 with col3:
                     split_summary_path = os.path.join(project_path, "_vsbvibe", "logs", "split_summary.json")
                     if os.path.exists(split_summary_path):
-                        if st.button("📋 View Split Summary"):
+                        if st.button("📋 Split Summary"):
                             with open(split_summary_path, 'r') as f:
                                 split_data = json.load(f)
-                            st.json(split_data)
+                            
+                            with st.expander("View Split Summary", expanded=True):
+                                st.json(split_data)
                 
                 # Filters
                 st.markdown("---")
@@ -491,6 +874,7 @@ class AdminInterface:
         else:
             st.info("No error log found. Errors will appear here when they occur.")
     
+    @safe_component
     def _generate_error_excel_report(self, project_path: str):
         """Generate Excel error report"""
         
@@ -516,6 +900,7 @@ class AdminInterface:
         except Exception as e:
             st.error(f"Error generating report: {e}")
     
+    @safe_component
     def _filter_errors(self, errors: list, module_filter: str, error_type_filter: str, timeframe: str) -> list:
         """Filter errors based on criteria"""
         
@@ -547,6 +932,7 @@ class AdminInterface:
         
         return filtered
     
+    @safe_page
     def _render_admin_chat(self):
         st.markdown("---")
         st.subheader("💬 Admin Chat")
@@ -589,6 +975,7 @@ class AdminInterface:
             
             st.rerun()
     
+    @safe_component
     def _update_requirements(self, requirements: str, version_note: str):
         """Update project requirements with versioning"""
         project_config = self.project_manager.get_project_config()
@@ -618,105 +1005,7 @@ class AdminInterface:
         # Update current requirements
         self.project_manager.update_project_config({"requirements": requirements})
     
-    def _generate_site(self, content: bool, images: bool, seo: bool, format: str, admin: bool):
-        """Generate the actual website files"""
-        project_path = self.project_manager.get_current_project_path()
-        site_path = os.path.join(project_path, "site")
-        
-        # Create main site app
-        if format == "Streamlit":
-            self._generate_streamlit_site(site_path, admin)
-        else:
-            self._generate_static_site(site_path)
-        
-        st.success("Site generated successfully!")
-    
-    def _generate_streamlit_site(self, site_path: str, include_admin: bool):
-        """Generate Streamlit-based website"""
-        
-        # Main site app
-        site_app_content = '''import streamlit as st
-import os
-import json
-
-st.set_page_config(page_title="Your Website", layout="wide")
-
-def load_content():
-    content_path = os.path.join("..", "_vsbvibe", "content_store.json")
-    if os.path.exists(content_path):
-        with open(content_path, 'r') as f:
-            return json.load(f)
-    return {}
-
-def main():
-    content = load_content()
-    global_content = content.get("global", {})
-    
-    st.title(global_content.get("company_name", "Your Company"))
-    st.subheader(global_content.get("tagline", "Welcome to our website"))
-    
-    # Hero section
-    st.markdown("---")
-    st.header("Welcome")
-    st.write("This is your generated website. Customize it through the Vsbvibe admin panel.")
-    
-    # Products section
-    st.header("Our Products")
-    products = content.get("products", [])
-    
-    if products:
-        for product in products:
-            with st.expander(product.get("name", "Product")):
-                st.write(product.get("description", ""))
-                st.write(f"Price: ${product.get('price', 0)}")
-    else:
-        st.info("No products found. Add products through the admin panel.")
-
-if __name__ == "__main__":
-    main()
-'''
-        
-        with open(os.path.join(site_path, "app.py"), 'w') as f:
-            f.write(site_app_content)
-    
-    def _generate_static_site(self, site_path: str):
-        """Generate static HTML website"""
-        
-        html_content = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Website</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { text-align: center; margin-bottom: 40px; }
-        .product { border: 1px solid #ddd; padding: 20px; margin: 10px 0; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Your Company</h1>
-            <p>Welcome to our website</p>
-        </div>
-        
-        <div id="products">
-            <h2>Our Products</h2>
-            <div class="product">
-                <h3>Sample Product</h3>
-                <p>Product description goes here</p>
-                <p><strong>Price: $99.99</strong></p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>'''
-        
-        with open(os.path.join(site_path, "index.html"), 'w') as f:
-            f.write(html_content)
-    
+    @safe_component
     def _build_site(self):
         """Build the site for deployment"""
         st.info("Site build process completed!")

@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from .utils import load_json, save_json, ensure_directory
+from site.core.errors import safe_page, safe_component
 
 class TestRunner:
     def __init__(self, project_manager):
@@ -291,11 +292,142 @@ class TestRunner:
         
         return results
     
+    @safe_component
+    def run_step4_tests(self) -> Dict[str, Dict[str, Any]]:
+        """Run tests specific to Step 4 - Excel Template Generation"""
+        results = {}
+        project_path = self.project_manager.get_current_project_path()
+        
+        if not project_path:
+            return {"no_project": {"passed": False, "message": "No project loaded"}}
+        
+        # Load plan to check requirements
+        plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
+        plan = load_json(plan_path) if os.path.exists(plan_path) else {}
+        
+        # Test 1: Products template exists if products enabled
+        products_enabled = plan.get("entities", {}).get("products", False)
+        products_path = os.path.join(project_path, "content", "products.xlsx")
+        
+        if products_enabled:
+            if os.path.exists(products_path):
+                # Validate products template structure
+                try:
+                    df = pd.read_excel(products_path)
+                    required_cols = ["title", "slug", "price"]
+                    missing_cols = [col for col in required_cols if col not in df.columns]
+                    
+                    if not missing_cols:
+                        results["products_template"] = {"passed": True, "message": "Products template valid"}
+                    else:
+                        results["products_template"] = {"passed": False, "message": f"Missing columns: {missing_cols}"}
+                except Exception as e:
+                    results["products_template"] = {"passed": False, "message": f"Invalid Excel file: {e}"}
+            else:
+                results["products_template"] = {"passed": False, "message": "Products template missing"}
+        else:
+            results["products_template"] = {"passed": True, "message": "Products not required"}
+        
+        # Test 2: Pages template exists if brochure pages planned
+        pages = plan.get("pages", [])
+        brochure_pages = [p for p in pages if p.get('type') not in ['product_list', 'product_detail']]
+        pages_path = os.path.join(project_path, "content", "pages.xlsx")
+        
+        if brochure_pages:
+            if os.path.exists(pages_path):
+                try:
+                    df = pd.read_excel(pages_path)
+                    required_cols = ["slug", "title"]
+                    missing_cols = [col for col in required_cols if col not in df.columns]
+                    
+                    if not missing_cols:
+                        results["pages_template"] = {"passed": True, "message": "Pages template valid"}
+                    else:
+                        results["pages_template"] = {"passed": False, "message": f"Missing columns: {missing_cols}"}
+                except Exception as e:
+                    results["pages_template"] = {"passed": False, "message": f"Invalid Excel file: {e}"}
+            else:
+                results["pages_template"] = {"passed": False, "message": "Pages template missing"}
+        else:
+            results["pages_template"] = {"passed": True, "message": "No brochure pages planned"}
+        
+        # Test 3: Directory structure exists
+        required_dirs = ["content", "content/images", "content/samples"]
+        missing_dirs = []
+        
+        for dir_path in required_dirs:
+            if not os.path.exists(os.path.join(project_path, dir_path)):
+                missing_dirs.append(dir_path)
+        
+        if not missing_dirs:
+            results["directory_structure"] = {"passed": True, "message": "Content directories exist"}
+        else:
+            results["directory_structure"] = {"passed": False, "message": f"Missing directories: {missing_dirs}"}
+        
+        # Test 4: Documentation exists
+        readme_path = os.path.join(project_path, "content", "README_import.md")
+        if os.path.exists(readme_path):
+            try:
+                with open(readme_path, 'r') as f:
+                    content = f.read()
+                
+                # Check for key sections
+                has_auto_mapping = "auto-mapping" in content.lower()
+                has_dry_run = "dry-run" in content.lower() or "dry run" in content.lower()
+                has_undo = "undo" in content.lower()
+                
+                if has_auto_mapping and has_dry_run and has_undo:
+                    results["documentation"] = {"passed": True, "message": "Complete documentation exists"}
+                else:
+                    missing = []
+                    if not has_auto_mapping:
+                        missing.append("auto-mapping")
+                    if not has_dry_run:
+                        missing.append("dry-run")
+                    if not has_undo:
+                        missing.append("undo")
+                    results["documentation"] = {"passed": False, "message": f"Documentation missing: {missing}"}
+            except Exception as e:
+                results["documentation"] = {"passed": False, "message": f"Cannot read documentation: {e}"}
+        else:
+            results["documentation"] = {"passed": False, "message": "README_import.md not found"}
+        
+        # Test 5: Sample files exist
+        sample_files = []
+        if products_enabled:
+            sample_files.append("content/samples/products_sample.csv")
+        if brochure_pages:
+            sample_files.append("content/samples/pages_sample.csv")
+        
+        missing_samples = []
+        for sample_file in sample_files:
+            if not os.path.exists(os.path.join(project_path, sample_file)):
+                missing_samples.append(sample_file)
+        
+        if not missing_samples:
+            results["sample_files"] = {"passed": True, "message": "All sample files exist"}
+        else:
+            results["sample_files"] = {"passed": False, "message": f"Missing samples: {missing_samples}"}
+        
+        # Test 6: Logs updated
+        templates_log_path = os.path.join(project_path, "_vsbvibe", "logs", "templates.log")
+        if os.path.exists(templates_log_path):
+            results["templates_log"] = {"passed": True, "message": "Templates log exists"}
+        else:
+            results["templates_log"] = {"passed": False, "message": "Templates log missing"}
+        
+        # Save test results
+        self._save_test_results("step4_tests", results)
+        
+        return results
+    
+    @safe_component
     def _validate_plan_structure(self, plan: Dict[str, Any]) -> bool:
         """Validate plan.json structure"""
         required_keys = ["pages", "navigation", "brand_tokens", "ui_ux_plan"]
         return all(key in plan for key in required_keys)
     
+    @safe_component
     def _is_url_safe(self, slug: str) -> bool:
         """Check if slug is URL-safe"""
         import re
@@ -303,6 +435,7 @@ class TestRunner:
         pattern = r'^[a-zA-Z0-9\-_/\[\]]*$'
         return bool(re.match(pattern, slug))
     
+    @safe_component
     def _validate_seo_defaults(self, seo_config: Dict[str, Any]) -> bool:
         """Validate SEO defaults structure"""
         required_sections = ["json_ld", "meta_defaults", "technical_seo"]
@@ -323,11 +456,13 @@ class TestRunner:
         
         return True
     
+    @safe_component
     def _validate_project_config(self, config: Dict[str, Any]) -> bool:
         """Validate project configuration structure"""
         required_keys = ["project_name", "company_name", "content_mode", "requirements"]
         return all(key in config for key in required_keys)
     
+    @safe_component
     def _test_directory_structure(self, project_path: str) -> bool:
         """Test if directory structure is correct"""
         required_dirs = [
@@ -344,6 +479,7 @@ class TestRunner:
                 return False
         return True
     
+    @safe_component
     def _save_test_results(self, test_name: str, results: Dict[str, Any]):
         """Save test results to _vsbvibe/tests/"""
         project_path = self.project_manager.get_current_project_path()
@@ -367,6 +503,7 @@ class TestRunner:
         report_path = os.path.join(tests_path, f"{test_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
         save_json(report_path, test_report)
     
+    @safe_page
     def render(self):
         st.header("🧪 Test Suite")
         
@@ -397,6 +534,7 @@ class TestRunner:
         if st.button("🚀 Run All Tests", type="primary"):
             self._run_all_tests()
     
+    @safe_page
     def _test_structure(self):
         st.subheader("Structure Tests")
         
@@ -453,6 +591,7 @@ class TestRunner:
         else:
             st.error(f"Structure Test: {passed_items}/{total_items} passed")
     
+    @safe_page
     def _test_content(self):
         st.subheader("Content Tests")
         
@@ -489,6 +628,7 @@ class TestRunner:
         else:
             st.error("Content store not found")
     
+    @safe_page
     def _test_links(self):
         st.subheader("Link Tests")
         
@@ -502,6 +642,7 @@ class TestRunner:
         if st.button("Run Link Tests"):
             st.success("All links validated successfully! (Placeholder)")
     
+    @safe_page
     def _test_seo(self):
         st.subheader("SEO/AEO Tests")
         
@@ -537,6 +678,7 @@ class TestRunner:
         else:
             st.error("SEO configuration not found")
     
+    @safe_page
     def _test_performance(self):
         st.subheader("Performance Tests")
         
@@ -550,6 +692,7 @@ class TestRunner:
         if st.button("Run Performance Tests"):
             st.success("Performance tests completed! (Placeholder)")
     
+    @safe_page
     def _test_database(self):
         st.subheader("Database CRUD Tests")
         
@@ -562,6 +705,7 @@ class TestRunner:
         if st.button("Run Database Tests"):
             st.success("Database tests completed! (Placeholder)")
     
+    @safe_component
     def _run_all_tests(self):
         """Run comprehensive test suite"""
         project_path = self.project_manager.get_current_project_path()
