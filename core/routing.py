@@ -114,8 +114,8 @@ def render_step4():
 
 def render_step5():
     """Render Step 5 - Data & Products"""
-    st.header("🛍️ Step 5: Data & Products")
-    st.info("Step 5 implementation coming soon...")
+    from interfaces.step5 import render_step5_interface
+    render_step5_interface()
 
 def render_step6():
     """Render Step 6 - AI Content"""

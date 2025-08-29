@@ -693,32 +693,125 @@ Disallow: *.log$
     
     @safe_page
     def _render_data(self):
-        st.subheader("Data Schema Management")
+        st.subheader("📊 Data Import Management")
         
-        # Database schema management
-        st.write("**Database Schema:**")
+        # Import status
+        project_path = self.project_manager.get_current_project_path()
+        content_store_path = os.path.join(project_path, "_vsbvibe", "content_store.json")
         
-        schema_info = {
-            "Tables": ["users", "products", "pages", "content"],
-            "Status": ["Active", "Active", "Pending", "Active"],
-            "Records": [0, 0, 0, 0]
-        }
+        if os.path.exists(content_store_path):
+            try:
+                with open(content_store_path, 'r') as f:
+                    content_store = json.load(f)
+                
+                # Display current data
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    products_count = len(content_store.get("products", []))
+                    st.metric("Products", products_count)
+                
+                with col2:
+                    pages_count = len(content_store.get("pages", {}))
+                    st.metric("Pages", pages_count)
+                
+                with col3:
+                    last_import = content_store.get("last_import", {})
+                    if last_import:
+                        import_date = last_import.get("timestamp", "")[:10]
+                        st.metric("Last Import", import_date)
+                    else:
+                        st.metric("Last Import", "Never")
+                
+                # Show recent products
+                if content_store.get("products"):
+                    with st.expander("📦 Recent Products"):
+                        products_df = pd.DataFrame(content_store["products"][:5])  # First 5
+                        if not products_df.empty:
+                            display_cols = ["title", "slug", "price", "category"]
+                            available_cols = [col for col in display_cols if col in products_df.columns]
+                            st.dataframe(products_df[available_cols], use_container_width=True)
+                
+                # Show recent pages
+                if content_store.get("pages"):
+                    with st.expander("📄 Recent Pages"):
+                        pages_data = []
+                        for slug, page_data in list(content_store["pages"].items())[:5]:
+                            pages_data.append({
+                                "slug": slug,
+                                "title": page_data.get("title", ""),
+                                "hero_headline": page_data.get("hero", {}).get("headline", "")[:50]
+                            })
+                        
+                        if pages_data:
+                            pages_df = pd.DataFrame(pages_data)
+                            st.dataframe(pages_df, use_container_width=True)
+                
+            except Exception as e:
+                st.error(f"Error reading content store: {e}")
+        else:
+            st.info("No content imported yet")
         
-        st.dataframe(pd.DataFrame(schema_info), use_container_width=True)
+        # Import management buttons
+        st.markdown("---")
+        st.write("**Import Management:**")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("Generate Schema"):
-                st.info("Schema generation will be implemented")
+            if st.button("📊 Go to Step 5"):
+                st.session_state.current_step = 5
+                st.rerun()
         
         with col2:
-            if st.button("Sync with Supabase"):
-                st.info("Supabase sync will be implemented")
+            # Undo last import
+            if os.path.exists(content_store_path):
+                if st.button("↩️ Undo Last Import"):
+                    from modules.data_importer import DataImporter
+                    data_importer = DataImporter(self.project_manager)
+                    
+                    undo_results = data_importer.undo_last_import()
+                    if undo_results["success"]:
+                        st.success("✅ Import undone successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"Undo failed: {undo_results['message']}")
         
         with col3:
-            if st.button("Backup Data"):
-                st.info("Data backup will be implemented")
+            # Download issues CSV if available
+            issues_path = os.path.join(project_path, "_vsbvibe", "issues.csv")
+            if os.path.exists(issues_path):
+                with open(issues_path, 'rb') as f:
+                    st.download_button(
+                        "📥 Download Issues",
+                        data=f.read(),
+                        file_name="issues.csv",
+                        mime="text/csv"
+                    )
+        
+        # Image mapping display
+        mapping_path = os.path.join(project_path, "_vsbvibe", "mapping", "image_map.json")
+        if os.path.exists(mapping_path):
+            with st.expander("🖼️ Image Mapping"):
+                try:
+                    with open(mapping_path, 'r') as f:
+                        image_map = json.load(f)
+                    
+                    mapping_data = []
+                    for slug, mapping in image_map.items():
+                        mapping_data.append({
+                            "Slug": slug,
+                            "Main Image": mapping.get("main_image", "None"),
+                            "Extras": len(mapping.get("extra_images", [])),
+                            "Confidence": mapping.get("confidence", "unknown")
+                        })
+                    
+                    if mapping_data:
+                        mapping_df = pd.DataFrame(mapping_data)
+                        st.dataframe(mapping_df, use_container_width=True)
+                
+                except Exception as e:
+                    st.error(f"Error reading image mapping: {e}")
     
     @safe_page
     def _render_publish(self):

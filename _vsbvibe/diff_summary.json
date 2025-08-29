@@ -11,6 +11,8 @@
     "interfaces/step2.py", 
     "interfaces/step3.py",
     "interfaces/step4.py",
+    "interfaces/step5.py",
+    "modules/data_importer.py",
     "modules/template_generator.py",
     "_vsbvibe/logs/split_summary.json",
     "site/core/__init__.py",
@@ -29,9 +31,9 @@
     "interfaces/__init__.py"
   ],
   "files_removed": [],
-  "summary": "Added Excel template generator with telemetry integration and enhanced admin interface",
+  "summary": "Added data import system with dry-run, apply, undo, and image auto-mapping",
   "line_count_reduction": {
     "app.py": "850 → 25 lines",
-    "largest_new_file": "200 lines (modules/template_generator.py)"
+    "largest_new_file": "300 lines (modules/data_importer.py)"
   }
 }
