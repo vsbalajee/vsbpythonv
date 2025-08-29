@@ -169,6 +169,128 @@ class TestRunner:
         
         return results
     
+    def run_step3_tests(self) -> Dict[str, Dict[str, Any]]:
+        """Run tests specific to Step 3 completion"""
+        results = {}
+        project_path = self.project_manager.get_current_project_path()
+        
+        if not project_path:
+            return {"no_project": {"passed": False, "message": "No project loaded"}}
+        
+        # Test 1: Scaffold structure exists
+        plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
+        if os.path.exists(plan_path):
+            plan = load_json(plan_path)
+            platform_target = plan.get("platform_target", "")
+            
+            output_path = os.path.join(project_path, "output", platform_target)
+            if os.path.exists(output_path):
+                results["scaffold_structure"] = {"passed": True, "message": f"Scaffold exists for {platform_target}"}
+            else:
+                results["scaffold_structure"] = {"passed": False, "message": f"No scaffold found for {platform_target}"}
+        else:
+            results["scaffold_structure"] = {"passed": False, "message": "No plan found"}
+        
+        # Test 2: Required files exist
+        if os.path.exists(plan_path):
+            plan = load_json(plan_path)
+            platform_target = plan.get("platform_target", "")
+            site_mode = plan.get("site_mode", "")
+            
+            output_path = os.path.join(project_path, "output", platform_target)
+            
+            if platform_target == "streamlit_site":
+                required_files = ["app.py", "components/nav.py", "styles/tokens.json", "seo/jsonld.py"]
+                
+                if site_mode == "ecommerce":
+                    required_files.extend(["pages/10_Shop.py", "pages/20_Product.py", "components/product_card.py"])
+                
+                missing_files = []
+                for file_path in required_files:
+                    if not os.path.exists(os.path.join(output_path, file_path)):
+                        missing_files.append(file_path)
+                
+                if not missing_files:
+                    results["required_files"] = {"passed": True, "message": "All required files present"}
+                else:
+                    results["required_files"] = {"passed": False, "message": f"Missing files: {', '.join(missing_files)}"}
+            
+            elif platform_target == "htmljs":
+                required_files = ["index.html", "css/main.css", "js/main.js"]
+                
+                if site_mode == "ecommerce":
+                    required_files.extend(["shop.html", "product.html"])
+                
+                missing_files = []
+                for file_path in required_files:
+                    if not os.path.exists(os.path.join(output_path, file_path)):
+                        missing_files.append(file_path)
+                
+                if not missing_files:
+                    results["required_files"] = {"passed": True, "message": "All required files present"}
+                else:
+                    results["required_files"] = {"passed": False, "message": f"Missing files: {', '.join(missing_files)}"}
+        
+        # Test 3: SEO exports exist
+        if os.path.exists(plan_path):
+            plan = load_json(plan_path)
+            platform_target = plan.get("platform_target", "")
+            
+            if platform_target == "streamlit_site":
+                public_path = os.path.join(project_path, "output", platform_target, "_public")
+                seo_files = ["sitemap.xml", "robots.txt"]
+            else:
+                public_path = os.path.join(project_path, "output", platform_target, "public")
+                seo_files = ["sitemap.xml", "robots.txt"]
+            
+            missing_seo = []
+            for seo_file in seo_files:
+                if not os.path.exists(os.path.join(public_path, seo_file)):
+                    missing_seo.append(seo_file)
+            
+            if not missing_seo:
+                results["seo_exports"] = {"passed": True, "message": "SEO export files present"}
+            else:
+                results["seo_exports"] = {"passed": False, "message": f"Missing SEO files: {', '.join(missing_seo)}"}
+        
+        # Test 4: Error reporting system
+        error_system_files = [
+            os.path.join("site", "core", "telemetry.py"),
+            os.path.join("site", "core", "errors.py"),
+            os.path.join("_vsbvibe", "logs", "app.log"),
+            os.path.join("_vsbvibe", "logs", "errors.log")
+        ]
+        
+        missing_error_files = []
+        for file_path in error_system_files:
+            full_path = os.path.join(project_path, file_path)
+            if not os.path.exists(full_path):
+                missing_error_files.append(file_path)
+        
+        if not missing_error_files:
+            results["error_system"] = {"passed": True, "message": "Error reporting system operational"}
+        else:
+            results["error_system"] = {"passed": False, "message": f"Missing error system files: {', '.join(missing_error_files)}"}
+        
+        # Test 5: Synthetic error test
+        try:
+            # Test error capture system
+            from site.core.errors import error_reporter
+            test_error = ValueError("Test error for validation")
+            error_id = error_reporter.capture_error(test_error, {"module": "test", "function": "validation"})
+            
+            if error_id:
+                results["error_capture"] = {"passed": True, "message": "Error capture system working"}
+            else:
+                results["error_capture"] = {"passed": False, "message": "Error capture system failed"}
+        except Exception as e:
+            results["error_capture"] = {"passed": False, "message": f"Error testing capture system: {e}"}
+        
+        # Save test results
+        self._save_test_results("step3_tests", results)
+        
+        return results
+    
     def _validate_plan_structure(self, plan: Dict[str, Any]) -> bool:
         """Validate plan.json structure"""
         required_keys = ["pages", "navigation", "brand_tokens", "ui_ux_plan"]

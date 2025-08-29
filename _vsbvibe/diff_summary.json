@@ -10,11 +10,19 @@
     "interfaces/step1.py",
     "interfaces/step2.py", 
     "interfaces/step3.py",
-    "_vsbvibe/logs/split_summary.json"
+    "_vsbvibe/logs/split_summary.json",
+    "site/core/__init__.py",
+    "site/core/telemetry.py",
+    "site/core/errors.py",
+    "_vsbvibe/logs/app.log",
+    "_vsbvibe/logs/errors.log"
   ],
   "files_updated": [
     "app.py",
-    "modules/scaffold_generator.py"
+    "modules/scaffold_generator.py",
+    "modules/admin_interface.py",
+    "modules/test_runner.py",
+    "interfaces/step3.py"
   ],
   "files_removed": [],
   "summary": "Refactored oversized files into modular structure with proper separation of concerns",

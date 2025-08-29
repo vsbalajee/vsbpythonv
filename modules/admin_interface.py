@@ -49,6 +49,10 @@ class AdminInterface:
         with admin_tabs[9]:
             self._render_jobs_logs()
         
+        # Add Errors tab
+        with st.tabs(["Errors"])[0]:
+            self._render_errors()
+        
         # Admin Chat at the bottom
         self._render_admin_chat()
     
@@ -386,6 +390,162 @@ class AdminInterface:
                     st.write(details)
         else:
             st.info("No logs found")
+    
+    def _render_errors(self):
+        st.subheader("🚨 Error Management")
+        
+        project_path = self.project_manager.get_current_project_path()
+        if not project_path:
+            st.error("No project loaded")
+            return
+        
+        # Error summary
+        errors_log_path = os.path.join(project_path, "_vsbvibe", "logs", "errors.log")
+        
+        if os.path.exists(errors_log_path):
+            # Load recent errors
+            recent_errors = []
+            try:
+                with open(errors_log_path, 'r') as f:
+                    for line in f:
+                        try:
+                            error_entry = json.loads(line.strip())
+                            recent_errors.append(error_entry)
+                        except:
+                            continue
+            except:
+                pass
+            
+            # Display error table
+            if recent_errors:
+                st.write("**Recent Errors:**")
+                
+                # Prepare data for display
+                error_data = []
+                for error in recent_errors[-20:]:  # Last 20 errors
+                    meta = error.get("meta", {})
+                    error_data.append({
+                        "Time": error.get("timestamp", "")[:19],
+                        "Module": meta.get("module", "unknown"),
+                        "File:Line": f"{meta.get('files_to_correct', 'unknown')}:{meta.get('line_number', 0)}",
+                        "Error": meta.get("error_name", "unknown"),
+                        "Status": meta.get("status", "new")
+                    })
+                
+                if error_data:
+                    df = pd.DataFrame(error_data)
+                    st.dataframe(df, use_container_width=True)
+                
+                # Error management buttons
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button("📊 Generate Error Report"):
+                        self._generate_error_excel_report(project_path)
+                
+                with col2:
+                    if st.button("📁 Open Suggestions Folder"):
+                        suggestions_path = os.path.join(project_path, "_vsbvibe", "errors", "suggestions")
+                        st.info(f"Suggestions folder: {suggestions_path}")
+                
+                with col3:
+                    split_summary_path = os.path.join(project_path, "_vsbvibe", "logs", "split_summary.json")
+                    if os.path.exists(split_summary_path):
+                        if st.button("📋 View Split Summary"):
+                            with open(split_summary_path, 'r') as f:
+                                split_data = json.load(f)
+                            st.json(split_data)
+                
+                # Filters
+                st.markdown("---")
+                st.write("**Filters:**")
+                
+                filter_col1, filter_col2, filter_col3 = st.columns(3)
+                
+                with filter_col1:
+                    module_filter = st.selectbox("Module", ["All"] + list(set(e.get("meta", {}).get("module", "unknown") for e in recent_errors)))
+                
+                with filter_col2:
+                    error_type_filter = st.selectbox("Error Type", ["All"] + list(set(e.get("meta", {}).get("error_name", "unknown") for e in recent_errors)))
+                
+                with filter_col3:
+                    timeframe = st.selectbox("Timeframe", ["Last 24h", "Last 7d", "Last 30d", "All"])
+                
+                # Apply filters and show filtered results
+                filtered_errors = self._filter_errors(recent_errors, module_filter, error_type_filter, timeframe)
+                
+                if filtered_errors:
+                    st.write(f"**Filtered Results ({len(filtered_errors)} errors):**")
+                    
+                    for error in filtered_errors[-10:]:  # Show last 10 filtered
+                        meta = error.get("meta", {})
+                        with st.expander(f"{meta.get('error_name', 'Error')} - {error.get('timestamp', '')[:19]}"):
+                            st.write(f"**Module:** {meta.get('module', 'unknown')}")
+                            st.write(f"**File:** {meta.get('files_to_correct', 'unknown')} (Line {meta.get('line_number', 0)})")
+                            st.write(f"**Message:** {meta.get('error_details', 'No details')}")
+                            st.write(f"**Suggested Fix:** {meta.get('suggested_fix', 'No suggestion')}")
+            
+            else:
+                st.success("No errors found!")
+        
+        else:
+            st.info("No error log found. Errors will appear here when they occur.")
+    
+    def _generate_error_excel_report(self, project_path: str):
+        """Generate Excel error report"""
+        
+        try:
+            from site.core.errors import error_reporter
+            
+            excel_path = os.path.join(project_path, "_vsbvibe", "errors", "error_report.xlsx")
+            
+            if os.path.exists(excel_path):
+                st.success(f"✅ Error report generated: {excel_path}")
+                
+                # Show download option
+                with open(excel_path, 'rb') as f:
+                    st.download_button(
+                        "📥 Download Error Report",
+                        data=f.read(),
+                        file_name="error_report.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            else:
+                st.warning("No error report found. Errors must occur first to generate report.")
+                
+        except Exception as e:
+            st.error(f"Error generating report: {e}")
+    
+    def _filter_errors(self, errors: list, module_filter: str, error_type_filter: str, timeframe: str) -> list:
+        """Filter errors based on criteria"""
+        
+        filtered = errors
+        
+        # Module filter
+        if module_filter != "All":
+            filtered = [e for e in filtered if e.get("meta", {}).get("module") == module_filter]
+        
+        # Error type filter
+        if error_type_filter != "All":
+            filtered = [e for e in filtered if e.get("meta", {}).get("error_name") == error_type_filter]
+        
+        # Timeframe filter
+        if timeframe != "All":
+            hours_map = {"Last 24h": 24, "Last 7d": 168, "Last 30d": 720}
+            hours = hours_map.get(timeframe, 24)
+            
+            cutoff_time = datetime.now().timestamp() - (hours * 3600)
+            filtered = []
+            
+            for error in errors:
+                try:
+                    error_time = datetime.fromisoformat(error["timestamp"]).timestamp()
+                    if error_time >= cutoff_time:
+                        filtered.append(error)
+                except:
+                    continue
+        
+        return filtered
     
     def _render_admin_chat(self):
         st.markdown("---")

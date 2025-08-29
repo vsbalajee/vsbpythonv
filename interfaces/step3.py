@@ -86,6 +86,29 @@ def render_step3_interface():
     output_path = os.path.join(project_path, "output", plan.get('platform_target', 'streamlit_site'))
     scaffold_exists = os.path.exists(output_path)
     
+    # Test error reporting system
+    st.subheader("🧪 Error Reporting Test")
+    
+    if st.button("Test Error Capture"):
+        try:
+            from site.core.errors import error_reporter
+            
+            # Generate test error
+            test_error = ValueError("Test error for system validation")
+            error_id = error_reporter.capture_error(test_error, {
+                "module": "test",
+                "function": "step3_validation",
+                "test_type": "synthetic"
+            })
+            
+            st.success(f"✅ Error captured successfully! Error ID: {error_id}")
+            st.info("Check Admin → Errors panel to see the captured error.")
+            
+        except Exception as e:
+            st.error(f"Error testing system failed: {e}")
+    
+    st.markdown("---")
+    
     if scaffold_exists:
         st.success("✅ Scaffold already generated")
         
