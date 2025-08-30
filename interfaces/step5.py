@@ -10,7 +10,7 @@ from modules.project_manager import ProjectManager
 from modules.data_importer import DataImporter
 from core.state import get_session_state
 from core.telemetry import log_user_action
-from site.core.errors import safe_page, safe_component
+from core.errors import safe_page, safe_component
 
 @safe_page
 def render_step5_interface():

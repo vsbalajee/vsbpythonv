@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from .utils import load_json, save_json, ensure_directory
-from site.core.errors import safe_page, safe_component
+from core.errors import safe_page, safe_component
 
 class TestRunner:
     def __init__(self, project_manager):
@@ -256,8 +256,8 @@ class TestRunner:
         
         # Test 4: Error reporting system
         error_system_files = [
-            os.path.join("site", "core", "telemetry.py"),
-            os.path.join("site", "core", "errors.py"),
+            os.path.join("core", "telemetry.py"),
+            os.path.join("core", "errors.py"),
             os.path.join("_vsbvibe", "logs", "app.log"),
             os.path.join("_vsbvibe", "logs", "errors.log")
         ]
@@ -276,7 +276,7 @@ class TestRunner:
         # Test 5: Synthetic error test
         try:
             # Test error capture system
-            from site.core.errors import error_reporter
+            from core.errors import error_reporter
             test_error = ValueError("Test error for validation")
             error_id = error_reporter.capture_error(test_error, {"module": "test", "function": "validation"})
             
@@ -470,7 +470,6 @@ class TestRunner:
             "_vsbvibe/tests",
             "_vsbvibe/logs",
             "assets",
-            "site",
             "content"
         ]
         
@@ -548,7 +547,6 @@ class TestRunner:
             "_vsbvibe",
             "_vsbvibe/tests", 
             "_vsbvibe/logs",
-            "site",
             "content"
         ]
         
@@ -742,3 +740,12 @@ class TestRunner:
             st.metric("Tests Failed", "0")
         with col3:
             st.metric("Issues Found", "0")
+
+def test_no_site_core_imports():
+    import pathlib, re
+    bad = []
+    for p in pathlib.Path(".").rglob("*.py"):
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        if re.search(r"\bfrom\s+site\.core\b|\bimport\s+site\.core\b", text):
+            bad.append(str(p))
+    assert not bad, f"Illegal 'site.core' imports found in: {bad}"

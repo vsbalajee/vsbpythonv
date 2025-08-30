@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 from .utils import ensure_directory, save_json, load_json, log_activity
-from site.core.errors import safe_page, safe_component
-from site.core.telemetry import log_event
+from core.errors import safe_page, safe_component
+from core.telemetry import log_event
 
 class DataImporter:
     def __init__(self, project_manager):
@@ -85,7 +85,7 @@ class DataImporter:
             return results
             
         except Exception as e:
-            from site.core.errors import error_reporter
+            from core.errors import error_reporter
             error_id = error_reporter.capture_error(e, {
                 "module": "data_importer",
                 "function": "dry_run_import",
@@ -172,7 +172,7 @@ class DataImporter:
             }
             
         except Exception as e:
-            from site.core.errors import error_reporter
+            from core.errors import error_reporter
             error_id = error_reporter.capture_error(e, {
                 "module": "data_importer",
                 "function": "apply_import",
@@ -228,7 +228,7 @@ class DataImporter:
             }
             
         except Exception as e:
-            from site.core.errors import error_reporter
+            from core.errors import error_reporter
             error_id = error_reporter.capture_error(e, {
                 "module": "data_importer",
                 "function": "undo_last_import"
