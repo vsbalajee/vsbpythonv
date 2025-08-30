@@ -7,13 +7,13 @@ import os
 import json
 from datetime import datetime
 from modules.project_manager import ProjectManager
-from modules.scaffold_generator import ScaffoldGenerator
 from core.state import get_session_state
 from core.telemetry import log_user_action
 from site.core.errors import safe_page, safe_component
 
 @safe_page
 def render_step3_interface():
+    from modules.scaffold_generator import ScaffoldGenerator  # lazy import
     """Render Step 3 - Generate Scaffold"""
     
     st.header("⚙️ Step 3: Generate Scaffold")

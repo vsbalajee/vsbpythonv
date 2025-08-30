@@ -6,10 +6,7 @@ from datetime import datetime
 from typing import Dict, Any
 import shutil
 from site.core.errors import safe_page, safe_component
-from .template_generator import TemplateGenerator
 from modules.project_manager import ProjectManager
-
-__all__ = ["render_admin_interface"]
 
 @safe_page
 def render_admin_interface():
@@ -321,6 +318,7 @@ class AdminInterface:
     def _generate_templates(self):
         """Generate Excel templates using TemplateGenerator"""
         try:
+            from modules.template_generator import TemplateGenerator
             template_generator = TemplateGenerator(self.project_manager)
             results = template_generator.generate_templates()
             
@@ -536,3 +534,5 @@ class AdminInterface:
         
         # Update current requirements
         self.project_manager.update_project_config({"requirements": requirements})
+
+__all__ = ["render_admin_interface"]

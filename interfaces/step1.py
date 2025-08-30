@@ -15,6 +15,30 @@ def render_step1_interface():
     st.header("🚀 Step 1: Project Setup & Requirements")
     st.write("Set up your project basics and define your requirements.")
     
+    # AI Connect & Error Logs panel
+    with st.expander("🔐 AI Connect & Error Logs", expanded=False):
+        # AI (OpenAI) status
+        has_key = bool(st.secrets.get("openai_api_key", "") or os.environ.get("OPENAI_API_KEY"))
+        current_model = st.secrets.get("openai_model", "gpt-5-mini")
+        if has_key:
+            st.success(f"OpenAI key loaded. Default model: **{current_model}**.")
+        else:
+            st.error("OpenAI key is missing. Add it in Streamlit secrets or `.streamlit/secrets.toml`.")
+        
+        # Error report download
+        excel_path = os.path.join("_vsbvibe", "errors", "error_report.xlsx")
+        if os.path.exists(excel_path):
+            with open(excel_path, "rb") as f:
+                st.download_button(
+                    "⬇️ Download Error Report (Excel)",
+                    data=f,
+                    file_name="error_report.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    help="Latest error log from telemetry"
+                )
+        else:
+            st.caption("No error report yet. It will appear here after the first captured error or from Admin → Generate.")
+    
     # Progress indicator
     progress_cols = st.columns(10)
     for i in range(10):

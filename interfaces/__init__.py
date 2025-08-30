@@ -1,2 +1,2 @@
-# Keep the package lightweight; avoid eager imports that pull heavy modules.
+# Avoid eager imports; steps are imported lazily by core.routing.
 __all__ = []

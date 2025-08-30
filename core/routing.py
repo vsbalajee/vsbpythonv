@@ -148,10 +148,6 @@ def render_admin_interface():
     """Render Admin Interface"""
     from modules.admin_interface import render_admin_interface
     render_admin_interface()
-
-def get_current_step_info() -> Dict[str, Any]:
-    """Get information about current step"""
-    
     current_step = st.session_state.get("current_step", 1)
     
     step_info = {
@@ -164,7 +160,9 @@ def get_current_step_info() -> Dict[str, Any]:
         7: {"title": "Design & Style", "description": "Customize design and styling"},
         8: {"title": "SEO & Performance", "description": "Optimize for search and performance"},
         9: {"title": "Test & Preview", "description": "Test and preview site"},
-        10: {"title": "Deploy & Publish", "description": "Deploy to production"}
+        10: {"title": "Deploy & Publish", "description": "Deploy to production"},
+        11: {"title": "Netlify Deployment", "description": "Deploy to Netlify"},
+        12: {"title": "Digital Ocean Deployment", "description": "Deploy to Digital Ocean"}
     }
     
     return step_info.get(current_step, {"title": "Unknown", "description": ""})
