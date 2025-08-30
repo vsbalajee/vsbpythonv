@@ -388,7 +388,6 @@ def _generate_pages_fallback(analysis: dict) -> list:
         }
     ]
     
-@safe_component
     # Add e-commerce pages if needed
     if analysis["site_mode"] == "ecommerce":
         pages.extend([
