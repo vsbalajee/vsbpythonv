@@ -150,17 +150,3 @@ def render_admin_interface():
     """Render Admin Interface"""
     from modules.admin_interface import render_admin_interface as _render_admin
     _render_admin()
-        2: {"title": "Analysis & Plan", "description": "Generate UI/UX plan from requirements"},
-        3: {"title": "Generate Scaffold", "description": "Create production-ready site structure"},
-        4: {"title": "Content Import", "description": "Import and organize content"},
-        5: {"title": "Data & Products", "description": "Set up products and data"},
-        6: {"title": "AI Content", "description": "Generate content with AI"},
-        7: {"title": "Design & Style", "description": "Customize design and styling"},
-        8: {"title": "SEO & Performance", "description": "Optimize for search and performance"},
-        9: {"title": "Test & Preview", "description": "Test and preview site"},
-        10: {"title": "Deploy & Publish", "description": "Deploy to production"},
-        11: {"title": "Netlify Deployment", "description": "Deploy to Netlify"},
-        12: {"title": "Digital Ocean Deployment", "description": "Deploy to Digital Ocean"}
-    }
-    
-    return step_info.get(current_step, {"title": "Unknown", "description": ""})
