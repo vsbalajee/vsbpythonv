@@ -108,8 +108,6 @@ def render_step3():
     """Render Step 3 - Generate Scaffold"""
     from interfaces.step3 import render_step3_interface
     render_step3_interface()
-    from interfaces.step3 import render_step3_interface
-    render_step3_interface()
 
 def render_step4():
     """Render Step 4 - Content Import"""
