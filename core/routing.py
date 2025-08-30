@@ -108,6 +108,8 @@ def render_step3():
     """Render Step 3 - Generate Scaffold"""
     from interfaces.step3 import render_step3_interface
     render_step3_interface()
+    from interfaces.step3 import render_step3_interface
+    render_step3_interface()
 
 def render_step4():
     """Render Step 4 - Content Import"""
@@ -148,10 +150,6 @@ def render_admin_interface():
     """Render Admin Interface"""
     from modules.admin_interface import render_admin_interface as _render_admin
     _render_admin()
-    current_step = st.session_state.get("current_step", 1)
-    
-    step_info = {
-        1: {"title": "Project Setup", "description": "Configure project basics and requirements"},
         2: {"title": "Analysis & Plan", "description": "Generate UI/UX plan from requirements"},
         3: {"title": "Generate Scaffold", "description": "Create production-ready site structure"},
         4: {"title": "Content Import", "description": "Import and organize content"},

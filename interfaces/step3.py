@@ -6,7 +6,6 @@ import streamlit as st
 import os
 import json
 from datetime import datetime
-from modules.project_manager import ProjectManager
 from core.state import get_session_state
 from core.telemetry import log_user_action
 
@@ -14,6 +13,7 @@ def render_step3_interface():
     # Lazy imports to avoid boot-time crashes
     from core.errors import safe_page, safe_component
     from modules.scaffold_generator import ScaffoldGenerator
+    from modules.project_manager import ProjectManager
 
     @safe_page
     def _render():

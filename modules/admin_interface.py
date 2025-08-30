@@ -12,58 +12,45 @@ from modules.project_manager import ProjectManager
 def render_admin_interface():
     """Render Admin Interface"""
     pm = ProjectManager()
-    
     st.title("Admin Interface")
-    
-    # --- Sidebar: Theme / Quick Actions ---
+
     with st.sidebar:
         st.subheader("Theme")
-        color_scheme = st.selectbox("Color scheme", ["System", "Light", "Dark"], index=0)
-        st.caption("Switch theme appearance for preview only.")
-    
-    # --- Tabs layout ---
+        color_scheme = st.selectbox("Color Scheme", ["System", "Light", "Dark"], index=0)
+        st.caption("Preview-only theme switcher")
+
     tab_req, tab_keys, tab_products, tab_errors, tab_tests = st.tabs(
         ["Requirements", "Models & Keys", "Products", "Errors", "Tests"]
     )
-    
-    # Requirements (hook up to existing implementation)
+
     with tab_req:
         st.subheader("Requirements (versioned)")
-        admin = AdminInterface(pm)
-        admin._render_requirements()
-    
-    # Keys (OpenAI, Supabase, GitHub) — non-persisted preview if needed
+        # render_requirements_panel(pm)
+
     with tab_keys:
         st.subheader("Models & Keys")
-        
-        # OpenAI key status
+
         if st.secrets.get("openai_api_key"):
             st.success("✅ OpenAI key is loaded from Streamlit secrets.")
         else:
             st.error("❌ OpenAI key is missing. Add it in Streamlit secrets or .streamlit/secrets.toml locally.")
-        
-        # Model info
+
         current_model = st.secrets.get("openai_model", "gpt-5-mini")
         st.info(f"Default OpenAI model: **{current_model}** (used automatically in all AI operations)")
-    
-    # Products admin (CRUD / import links)
+
     with tab_products:
         st.subheader("Products")
-        admin = AdminInterface(pm)
-        admin._render_products_enhanced()
-    
-    # Errors panel (Excel + logs)
+        # render_products_admin()
+
     with tab_errors:
         st.subheader("Errors & Logs")
-        st.write("Download Excel error report or view recent errors.")
-        admin = AdminInterface(pm)
-        admin._render_errors()
-    
-    # Tests
+        # render_errors_panel()
+
     with tab_tests:
         st.subheader("Test Module")
-        admin = AdminInterface(pm)
-        admin._render_tests()
+        # render_tests_panel()
+
+__all__ = ["render_admin_interface"]
 
 class AdminInterface:
     def __init__(self, project_manager):
