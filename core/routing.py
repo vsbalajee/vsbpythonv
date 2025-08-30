@@ -90,6 +90,8 @@ def render_sidebar_navigation():
         8. Optimize SEO
         9. Test everything
         10. Deploy live
+        11. Netlify Deployment
+        12. Digital Ocean Deployment
         """)
 
 def render_step1():
@@ -144,12 +146,8 @@ def render_step10():
 
 def render_admin_interface():
     """Render Admin Interface"""
-    from modules.admin_interface import AdminInterface
-    from modules.project_manager import ProjectManager
-    
-    project_manager = ProjectManager()
-    admin = AdminInterface(project_manager)
-    admin.render()
+    from modules.admin_interface import render_admin_interface
+    render_admin_interface()
 
 def get_current_step_info() -> Dict[str, Any]:
     """Get information about current step"""
