@@ -5,11 +5,14 @@ Step 2 Interface - Reference Analysis & UI/UX Plan
 import streamlit as st
 import os
 import json
+import openai
 from datetime import datetime
 from modules.project_manager import ProjectManager
 from core.state import get_session_state, update_session_state
 from core.telemetry import log_user_action
+from core.errors import safe_page, safe_component
 
+@safe_page
 def render_step2_interface():
     """Render Step 2 - Reference Analysis & UI/UX Plan"""
     
@@ -122,9 +125,10 @@ def render_step2_interface():
         st.info("No plan generated yet. Click below to analyze requirements and create UI/UX plan.")
         
         if st.button("Generate Plan", type="primary"):
-            _generate_plan(project_manager, project_config)
+            _generate_plan_with_ai(project_manager, project_config)
             st.rerun()
 
+@safe_component
 def _display_plan_summary(plan: dict):
     """Display plan summary"""
     
@@ -155,24 +159,74 @@ def _display_plan_summary(plan: dict):
         if entities.get("contact"):
             st.write("• Contact forms enabled")
 
-def _generate_plan(project_manager: ProjectManager, project_config: dict):
-    """Generate UI/UX plan from requirements"""
+@safe_component
+def _generate_plan_with_ai(project_manager: ProjectManager, project_config: dict):
+    """Generate UI/UX plan using AI analysis"""
     
     try:
         with st.spinner("Analyzing requirements and generating plan..."):
             
-            # Analyze requirements
+            # Check AI availability
+            openai_key = st.secrets.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
+            if not openai_key:
+                st.error("OpenAI API key not configured. Please add it in Streamlit secrets.")
+                return
+            
+            # Set up OpenAI
+            openai.api_key = openai_key
+            model = st.secrets.get("openai_model", "gpt-4o-mini")
+            
+            # AI-powered requirements analysis
             requirements = project_config.get("requirements", "")
             content_mode = project_config.get("content_mode", "AI Generated")
+            company_name = project_config.get("company_name", "")
             
-            # Detect site characteristics
-            site_analysis = _analyze_requirements(requirements)
+            # Create AI prompt for analysis
+            analysis_prompt = f"""
+Analyze the following website requirements and provide a structured analysis:
+
+Company: {company_name}
+Requirements: {requirements}
+Content Mode: {content_mode}
+
+Please analyze and return a JSON response with:
+1. site_mode: "ecommerce" or "brochure"
+2. target_audience: "business", "consumer", or "general"
+3. layout_style: "modern", "classic", or "creative"
+4. color_scheme: "professional", "vibrant", or "minimal"
+5. features: array of detected features like ["blog", "contact", "search", "gallery"]
+6. entities: object with boolean flags for products, blog, contact, gallery, testimonials
+7. pages: array of page objects with name, slug, type, priority, sections
+8. reasoning: explanation of decisions made
+
+Return only valid JSON, no markdown formatting.
+"""
+            
+            # Call OpenAI API
+            try:
+                response = openai.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a website planning expert. Analyze requirements and return structured JSON for website planning."},
+                        {"role": "user", "content": analysis_prompt}
+                    ],
+                    temperature=0.3
+                )
+                
+                ai_analysis = json.loads(response.choices[0].message.content)
+                
+            except Exception as e:
+                st.error(f"AI analysis failed: {str(e)}. Falling back to keyword analysis.")
+                ai_analysis = _analyze_requirements_fallback(requirements)
+            
+            # Use AI analysis or fallback
+            site_analysis = ai_analysis
             
             # Generate plan
             plan = {
                 "platform_target": "streamlit_site",  # Default for this implementation
                 "site_mode": site_analysis["site_mode"],
-                "pages": _generate_pages(site_analysis),
+                "pages": site_analysis.get("pages", _generate_pages_fallback(site_analysis)),
                 "navigation": _generate_navigation(site_analysis),
                 "brand_tokens": _generate_brand_tokens(site_analysis, project_config),
                 "entities": site_analysis["entities"],
@@ -180,7 +234,8 @@ def _generate_plan(project_manager: ProjectManager, project_config: dict):
                     "layout": site_analysis["layout_style"],
                     "color_scheme": site_analysis["color_scheme"],
                     "target_audience": site_analysis["target_audience"],
-                    "features": site_analysis["features"]
+                    "features": site_analysis["features"],
+                    "ai_reasoning": site_analysis.get("reasoning", "AI analysis completed")
                 },
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat()
@@ -233,9 +288,16 @@ def _generate_plan(project_manager: ProjectManager, project_config: dict):
             st.success("✅ Plan generated successfully!")
             
     except Exception as e:
-        st.error(f"Error generating plan: {str(e)}")
+        from core.errors import error_reporter
+        error_id = error_reporter.capture_error(e, {
+            "module": "step2",
+            "function": "_generate_plan_with_ai",
+            "has_openai_key": bool(st.secrets.get("openai_api_key"))
+        })
+        st.error(f"Error generating plan: {str(e)} (Error ID: {error_id})")
 
-def _analyze_requirements(requirements: str) -> dict:
+@safe_component
+def _analyze_requirements_fallback(requirements: str) -> dict:
     """Analyze requirements text to determine site characteristics"""
     
     req_lower = requirements.lower()
@@ -312,7 +374,8 @@ def _analyze_requirements(requirements: str) -> dict:
         "entities": entities
     }
 
-def _generate_pages(analysis: dict) -> list:
+@safe_component
+def _generate_pages_fallback(analysis: dict) -> list:
     """Generate pages based on analysis"""
     
     pages = [
@@ -325,6 +388,7 @@ def _generate_pages(analysis: dict) -> list:
         }
     ]
     
+@safe_component
     # Add e-commerce pages if needed
     if analysis["site_mode"] == "ecommerce":
         pages.extend([
@@ -375,6 +439,7 @@ def _generate_pages(analysis: dict) -> list:
     
     return pages
 
+@safe_component
 def _generate_navigation(analysis: dict) -> dict:
     """Generate navigation structure"""
     
@@ -437,6 +502,7 @@ def _generate_brand_tokens(analysis: dict, project_config: dict) -> dict:
         "created_at": datetime.now().isoformat()
     }
 
+@safe_component
 def _generate_seo_defaults(project_config: dict, plan: dict) -> dict:
     """Generate SEO defaults configuration"""
     
@@ -470,6 +536,7 @@ def _generate_seo_defaults(project_config: dict, plan: dict) -> dict:
         "updated_at": datetime.now().isoformat()
     }
 
+@safe_component
 def _generate_analysis_report(project_config: dict, analysis: dict, plan: dict) -> dict:
     """Generate analysis report"""
     
