@@ -8,28 +8,6 @@ import json
 import shutil
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from xml.etree.ElementTree import Element, SubElement, tostring
-
-def _build_sitemap_xml(urls, base_url):
-    """
-    urls: iterable of route paths like ["/", "/shop", "/p/slug"]
-    base_url: e.g., "https://example.com" (no trailing slash required)
-    """
-    base = (base_url or "").rstrip("/")
-    urlset = Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
-    for path in urls or []:
-        u = SubElement(urlset, "url")
-        loc = SubElement(u, "loc")
-        loc.text = f"{base}/{str(path).lstrip('/')}"
-    xml = tostring(urlset, encoding="unicode")
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml
-
-def _build_robots_txt(base_url):
-    base = (base_url or "").rstrip("/")
-    lines = ["User-agent: *", "Allow: /"]
-    if base:
-        lines.append(f"Sitemap: {base}/sitemap.xml")
-    return "\n".join(lines).strip() + "\n"
 from .utils import ensure_directory, save_json
 
 class ScaffoldGenerator:
