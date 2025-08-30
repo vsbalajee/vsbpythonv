@@ -90,8 +90,6 @@ def render_sidebar_navigation():
         8. Optimize SEO
         9. Test everything
         10. Deploy live
-        11. Netlify Deployment
-        12. Digital Ocean Deployment
         """)
 
 def render_step1():
