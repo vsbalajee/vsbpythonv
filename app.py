@@ -7,6 +7,16 @@ import streamlit as st
 import sys
 import os
 
+# --- Secrets bootstrap (OpenAI & others) ---
+import os
+import streamlit as st
+
+if "openai_api_key" in st.secrets and st.secrets.get("openai_api_key"):
+    os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+
+# Set default OpenAI model (always GPT-5 Mini unless overridden)
+DEFAULT_OPENAI_MODEL = st.secrets.get("openai_model", "gpt-5-mini")
+
 # Add modules to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
 

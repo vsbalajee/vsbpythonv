@@ -38,8 +38,16 @@ def render_admin_interface():
     # Keys (OpenAI, Supabase, GitHub) — non-persisted preview if needed
     with tab_keys:
         st.subheader("Models & Keys")
-        admin = AdminInterface(pm)
-        admin._render_models_keys()
+        
+        # OpenAI key status
+        if st.secrets.get("openai_api_key"):
+            st.success("✅ OpenAI key is loaded from Streamlit secrets.")
+        else:
+            st.error("❌ OpenAI key is missing. Add it in Streamlit secrets or .streamlit/secrets.toml locally.")
+        
+        # Model info
+        current_model = st.secrets.get("openai_model", "gpt-5-mini")
+        st.info(f"Default OpenAI model: **{current_model}** (used automatically in all AI operations)")
     
     # Products admin (CRUD / import links)
     with tab_products:
