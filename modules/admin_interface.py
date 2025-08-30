@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, Any
 import shutil
-from site.core.errors import safe_page, safe_component
+from core.errors import safe_page, safe_component
 from modules.project_manager import ProjectManager
 
 @safe_page
@@ -152,10 +152,8 @@ class AdminInterface:
         st.subheader("AI Models & API Keys")
         
         # Load current settings
-        settings_path = os.path.join(
-            self.project_manager.get_current_project_path(), 
-            "_vsbvibe", "settings.json"
-        )
+        project_path = self.project_manager.get_current_project_path()
+        settings_path = os.path.join(project_path, "_vsbvibe", "settings.json")
         
         settings = {}
         if os.path.exists(settings_path):
@@ -197,10 +195,8 @@ class AdminInterface:
     def _render_pages(self):
         st.subheader("📄 Pages Management")
         
-        plan_path = os.path.join(
-            self.project_manager.get_current_project_path(), 
-            "_vsbvibe", "plan.json"
-        )
+        project_path = self.project_manager.get_current_project_path()
+        plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
         
         try:
             plan = {}
@@ -234,7 +230,6 @@ class AdminInterface:
                             platform_target = plan.get("platform_target", "streamlit_site")
                             if platform_target == "streamlit_site":
                                 page_file = f"site/pages/{i:02d}_{page.get('name', 'Page').replace(' ', '_')}.py"
-                                project_path = self.project_manager.get_current_project_path()
                                 file_exists = os.path.exists(os.path.join(project_path, "output", platform_target, page_file))
                                 
                                 if file_exists:
@@ -245,8 +240,6 @@ class AdminInterface:
             # Template management
             st.markdown("---")
             st.subheader("📋 Content Templates")
-            
-            project_path = self.project_manager.get_current_project_path()
             
             # Check for existing templates
             products_path = os.path.join(project_path, "content", "products.xlsx")
@@ -484,7 +477,7 @@ class AdminInterface:
         """Generate Excel error report"""
         
         try:
-            from site.core.errors import error_reporter
+            from core.errors import error_reporter
             
             excel_path = os.path.join(project_path, "_vsbvibe", "errors", "error_report.xlsx")
             

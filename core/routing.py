@@ -146,8 +146,8 @@ def render_step10():
 
 def render_admin_interface():
     """Render Admin Interface"""
-    from modules.admin_interface import render_admin_interface
-    render_admin_interface()
+    from modules.admin_interface import render_admin_interface as _render_admin
+    _render_admin()
     current_step = st.session_state.get("current_step", 1)
     
     step_info = {
