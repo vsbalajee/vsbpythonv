@@ -384,6 +384,43 @@ def safe_page(func: Callable) -> Callable:
     
     return wrapper
 
+def safe_page(func: Callable) -> Callable:
+    """Decorator for safe page rendering with error capture"""
+    
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            from .telemetry import log_event
+            log_event("page_render_start", {"page": func.__name__})
+            result = func(*args, **kwargs)
+            log_event("page_render_success", {"page": func.__name__})
+            return result
+        except Exception as e:
+            context = {
+                "module": "page",
+                "function": func.__name__,
+                "args_count": len(args),
+                "kwargs_keys": list(kwargs.keys())
+            }
+            
+            error_id = error_reporter.capture_error(e, context)
+            
+            # Show user-friendly error in Streamlit
+            try:
+                import streamlit as st
+                st.error(f"Page Error: {type(e).__name__}")
+                st.write(f"Error ID: {error_id}")
+                st.write("This error has been logged for review.")
+                
+                with st.expander("Technical Details"):
+                    st.code(str(e))
+            except:
+                print(f"Page error in {func.__name__}: {e}")
+            
+            return None
+    
+    return wrapper
+
 def safe_component(func: Callable) -> Callable:
     """Decorator for safe component rendering with error capture"""
     

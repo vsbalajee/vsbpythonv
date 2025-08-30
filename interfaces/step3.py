@@ -17,6 +17,12 @@ def render_step3_interface():
 
     @safe_page
     def _render():
+    # Lazy imports to avoid boot-time crashes
+    from core.errors import safe_page, safe_component
+    from modules.scaffold_generator import ScaffoldGenerator
+
+    @safe_page
+    def _render():
         """Render Step 3 - Generate Scaffold"""
         
         st.header("⚙️ Step 3: Generate Scaffold")
