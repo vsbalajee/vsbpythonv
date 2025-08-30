@@ -1,583 +1,592 @@
 """
-Step 2 Interface - Reference Analysis & UI/UX Plan
+Scaffold generation utilities for Vsbvibe
+Generates production-ready applications from UI/UX plans with platform awareness
+"""
+
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from xml.etree.ElementTree import Element, SubElement, tostring
+from typing import Dict, Any, List, Optional
+from .utils import ensure_directory, save_json
+from core.errors import safe_component
+
+def _build_sitemap_xml(urls, base_url):
+    """Build sitemap XML safely without triple-quoted literals"""
+    base = (base_url or "").rstrip("/")
+    urlset = Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    for path in urls or []:
+        u = SubElement(urlset, "url")
+        loc = SubElement(u, "loc")
+        loc.text = f"{base}/{str(path).lstrip('/')}"
+    xml = tostring(urlset, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml
+
+def _build_robots_txt(base_url):
+    """Build robots.txt safely"""
+    base = (base_url or "").rstrip("/")
+    lines = ["User-agent: *", "Allow: /"]
+    if base:
+        lines.append(f"Sitemap: {base}/sitemap.xml")
+    return "\n".join(lines).strip() + "\n"
+
+class ScaffoldGenerator:
+    """Generate production-ready website scaffolds"""
+    
+    def __init__(self, project_config: Dict[str, Any], plan: Dict[str, Any], options: Dict[str, Any] = None):
+        self.project_config = project_config
+        self.plan = plan
+        self.options = options or {}
+        self.project_path = project_config.get("local_folder", "")
+        self.project_name = project_config.get("project_name", "project").lower().replace(" ", "-")
+    
+    @safe_component
+    def generate(self) -> Dict[str, Any]:
+        """Generate complete scaffold"""
+        
+        try:
+            platform_target = self.plan.get("platform_target", "react_vite")
+            
+            if platform_target == "react_vite":
+                return self._generate_react_vite_scaffold()
+            elif platform_target == "streamlit_site":
+                return self._generate_streamlit_scaffold()
+            elif platform_target == "htmljs":
+                return self._generate_htmljs_scaffold()
+            else:
+                return {"success": False, "error": f"Unsupported platform: {platform_target}"}
+                
+        except Exception as e:
+            from core.errors import error_reporter
+            error_id = error_reporter.capture_error(e, {
+                "module": "scaffold_generator",
+                "function": "generate",
+                "platform": self.plan.get("platform_target"),
+                "project": self.project_config.get("project_name")
+            })
+            return {"success": False, "error": str(e), "error_id": error_id}
+    
+    @safe_component
+    def _generate_streamlit_scaffold(self) -> Dict[str, Any]:
+        """Generate Streamlit site scaffold"""
+        
+        output_path = os.path.join(self.project_path, self.project_name, "output", "streamlit_site")
+        ensure_directory(output_path)
+        
+        files_created = []
+        
+        # Generate main app.py
+        app_content = self._generate_streamlit_app()
+        app_path = os.path.join(output_path, "app.py")
+        with open(app_path, 'w') as f:
+            f.write(app_content)
+        files_created.append("app.py")
+        
+        # Generate pages
+        pages_dir = os.path.join(output_path, "pages")
+        ensure_directory(pages_dir)
+        
+        for i, page in enumerate(self.plan.get("pages", [])):
+            page_content = self._generate_streamlit_page(page)
+            page_filename = f"{i+1:02d}_{page.get('name', 'Page').replace(' ', '_')}.py"
+            page_path = os.path.join(pages_dir, page_filename)
+            with open(page_path, 'w') as f:
+                f.write(page_content)
+            files_created.append(f"pages/{page_filename}")
+        
+        # Generate components
+        components_dir = os.path.join(output_path, "components")
+        ensure_directory(components_dir)
+        
+        # Navigation component
+        nav_content = self._generate_navigation_component()
+        nav_path = os.path.join(components_dir, "nav.py")
+        with open(nav_path, 'w') as f:
+            f.write(nav_content)
+        files_created.append("components/nav.py")
+        
+        # Generate SEO utilities if enabled
+        if self.options.get("include_seo", True):
+            seo_files = self._generate_seo_files(output_path)
+            files_created.extend(seo_files)
+        
+        # Generate styles
+        styles_dir = os.path.join(output_path, "styles")
+        ensure_directory(styles_dir)
+        
+        tokens_content = json.dumps(self.plan.get("brand_tokens", {}), indent=2)
+        tokens_path = os.path.join(styles_dir, "tokens.json")
+        with open(tokens_path, 'w') as f:
+            f.write(tokens_content)
+        files_created.append("styles/tokens.json")
+        
+        return {
+            "success": True,
+            "files_created": files_created,
+            "output_path": output_path
+        }
+    
+    @safe_component
+    def _generate_streamlit_app(self) -> str:
+        """Generate main Streamlit app.py"""
+        
+        company_name = self.project_config.get("company_name", "Your Company")
+        
+        return f'''"""
+{company_name} Website
+Generated by Vsbvibe
 """
 
 import streamlit as st
-import os
-import json
-import openai
-from datetime import datetime
-from modules.project_manager import ProjectManager
-from core.state import get_session_state, update_session_state
-from core.telemetry import log_user_action
-from core.errors import safe_page, safe_component
+from components.nav import render_navigation
 
-@safe_page
-def render_step2_interface():
-    """Render Step 2 - Reference Analysis & UI/UX Plan"""
-    
-    st.header("🔍 Step 2: Reference Analysis & UI/UX Plan")
-    st.write("Analyze requirements and generate a comprehensive UI/UX plan.")
-    
-    # Progress indicator
-    progress_cols = st.columns(10)
-    for i in range(10):
-        with progress_cols[i]:
-            if i == 1:
-                st.markdown("🔵")  # Current step
-            elif i == 0:
-                st.markdown("✅")  # Completed step
-            else:
-                st.markdown("⚪")  # Future steps
-    
-    st.markdown("---")
-    
-    # Check if project is loaded
-    project_path = get_session_state("project_path")
-    if not project_path:
-        st.error("No project loaded. Please complete Step 1 first.")
-        return
-    
-    # Load project configuration
-    project_manager = ProjectManager()
-    project_manager.current_project_path = project_path
-    project_config = project_manager.load_project_config()
-    
-    if not project_config:
-        st.error("Could not load project configuration.")
-        return
-    
-    # Display project info
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.info(f"**Project:** {project_config.get('project_name', 'Unknown')}")
-        st.info(f"**Company:** {project_config.get('company_name', 'Unknown')}")
-    
-    with col2:
-        st.info(f"**Content Mode:** {project_config.get('content_mode', 'Unknown')}")
-        st.info(f"**Status:** {project_config.get('status', 'Unknown')}")
-    
-    # Check for existing plan
-    plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
-    existing_plan = None
-    
-    if os.path.exists(plan_path):
-        try:
-            with open(plan_path, 'r') as f:
-                existing_plan = json.load(f)
-        except:
-            pass
-    
-    # Analysis section
-    st.subheader("📋 Requirements Analysis")
-    
-    requirements = project_config.get("requirements", "")
-    if requirements:
-        with st.expander("View Requirements", expanded=False):
-            st.text_area("Requirements", value=requirements, height=150, disabled=True)
-    
-    # Reference analysis
-    reference_url = project_config.get("reference_url", "")
-    screenshots = project_config.get("screenshots", [])
-    
-    if reference_url or screenshots:
-        st.subheader("🔗 Reference Analysis")
-        
-        if reference_url:
-            st.write(f"**Reference URL:** {reference_url}")
-        
-        if screenshots:
-            st.write(f"**Screenshots:** {len(screenshots)} files uploaded")
-            
-            # Show screenshot thumbnails
-            if st.checkbox("Show Screenshots"):
-                cols = st.columns(min(len(screenshots), 3))
-                for i, screenshot in enumerate(screenshots):
-                    with cols[i % 3]:
-                        screenshot_path = os.path.join(project_path, screenshot)
-                        if os.path.exists(screenshot_path):
-                            st.image(screenshot_path, caption=f"Screenshot {i+1}")
-    
-    # Plan generation
-    st.subheader("🎯 UI/UX Plan Generation")
-    
-    if existing_plan:
-        st.success("✅ Plan already exists")
-        
-        # Show plan summary
-        with st.expander("View Current Plan", expanded=True):
-            _display_plan_summary(existing_plan)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("Regenerate Plan", type="secondary"):
-                _generate_plan(project_manager, project_config)
-                st.rerun()
-        
-        with col2:
-            if st.button("Continue to Step 3", type="primary"):
-                st.session_state.current_step = 3
-                st.rerun()
-    
-    else:
-        st.info("No plan generated yet. Click below to analyze requirements and create UI/UX plan.")
-        
-        if st.button("Generate Plan", type="primary"):
-            _generate_plan_with_ai(project_manager, project_config)
-            st.rerun()
-
-@safe_component
-def _display_plan_summary(plan: dict):
-    """Display plan summary"""
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Platform & Mode:**")
-        st.write(f"• Platform: {plan.get('platform_target', 'Unknown')}")
-        st.write(f"• Site Mode: {plan.get('site_mode', 'Unknown')}")
-        
-        st.write("**Pages:**")
-        pages = plan.get("pages", [])
-        for page in pages:
-            st.write(f"• {page.get('name', 'Unknown')} ({page.get('slug', '/')})")
-    
-    with col2:
-        st.write("**Brand Tokens:**")
-        brand_tokens = plan.get("brand_tokens", {})
-        st.write(f"• Primary Color: {brand_tokens.get('primary_color', '#007bff')}")
-        st.write(f"• Font Family: {brand_tokens.get('font_family', 'Inter')}")
-        
-        st.write("**Features:**")
-        entities = plan.get("entities", {})
-        if entities.get("products"):
-            st.write("• E-commerce enabled")
-        if entities.get("blog"):
-            st.write("• Blog enabled")
-        if entities.get("contact"):
-            st.write("• Contact forms enabled")
-
-@safe_component
-def _generate_plan_with_ai(project_manager: ProjectManager, project_config: dict):
-    """Generate UI/UX plan using AI analysis"""
-    
-    try:
-        with st.spinner("Analyzing requirements and generating plan..."):
-            
-            # Check AI availability
-            openai_key = st.secrets.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
-            if not openai_key:
-                st.error("OpenAI API key not configured. Please add it in Streamlit secrets.")
-                return
-            
-            # Set up OpenAI
-            openai.api_key = openai_key
-            model = st.secrets.get("openai_model", "gpt-4o-mini")
-            
-            # AI-powered requirements analysis
-            requirements = project_config.get("requirements", "")
-            content_mode = project_config.get("content_mode", "AI Generated")
-            company_name = project_config.get("company_name", "")
-            
-            # Create AI prompt for analysis
-            analysis_prompt = f"""
-Analyze the following website requirements and provide a structured analysis:
-
-Company: {company_name}
-Requirements: {requirements}
-Content Mode: {content_mode}
-
-Please analyze and return a JSON response with:
-1. site_mode: "ecommerce" or "brochure"
-2. target_audience: "business", "consumer", or "general"
-3. layout_style: "modern", "classic", or "creative"
-4. color_scheme: "professional", "vibrant", or "minimal"
-5. features: array of detected features like ["blog", "contact", "search", "gallery"]
-6. entities: object with boolean flags for products, blog, contact, gallery, testimonials
-7. pages: array of page objects with name, slug, type, priority, sections
-8. reasoning: explanation of decisions made
-
-Return only valid JSON, no markdown formatting.
-"""
-            
-            # Call OpenAI API
-            try:
-                response = openai.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": "You are a website planning expert. Analyze requirements and return structured JSON for website planning."},
-                        {"role": "user", "content": analysis_prompt}
-                    ],
-                    temperature=0.3
-                )
-                
-                ai_analysis = json.loads(response.choices[0].message.content)
-                
-            except Exception as e:
-                st.error(f"AI analysis failed: {str(e)}. Falling back to keyword analysis.")
-                ai_analysis = _analyze_requirements_fallback(requirements)
-            
-            # Use AI analysis or fallback
-            site_analysis = ai_analysis
-            
-            # Generate plan
-            plan = {
-                "platform_target": "streamlit_site",  # Default for this implementation
-                "site_mode": site_analysis["site_mode"],
-                "pages": site_analysis.get("pages", _generate_pages_fallback(site_analysis)),
-                "navigation": _generate_navigation(site_analysis),
-                "brand_tokens": _generate_brand_tokens(site_analysis, project_config),
-                "entities": site_analysis["entities"],
-                "ui_ux_plan": {
-                    "layout": site_analysis["layout_style"],
-                    "color_scheme": site_analysis["color_scheme"],
-                    "target_audience": site_analysis["target_audience"],
-                    "features": site_analysis["features"],
-                    "ai_reasoning": site_analysis.get("reasoning", "AI analysis completed")
-                },
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat()
-            }
-            
-            # Generate SEO defaults
-            seo_defaults = _generate_seo_defaults(project_config, plan)
-            
-            # Generate analysis report
-            analysis_report = _generate_analysis_report(project_config, site_analysis, plan)
-            
-            # Save files
-            project_path = project_manager.get_current_project_path()
-            
-            # Save plan
-            plan_path = os.path.join(project_path, "_vsbvibe", "plan.json")
-            with open(plan_path, 'w') as f:
-                json.dump(plan, f, indent=2)
-            
-            # Save SEO defaults
-            seo_path = os.path.join(project_path, "_vsbvibe", "seo_defaults.json")
-            with open(seo_path, 'w') as f:
-                json.dump(seo_defaults, f, indent=2)
-            
-            # Save analysis report
-            report_path = os.path.join(project_path, "_vsbvibe", "analysis_report.json")
-            with open(report_path, 'w') as f:
-                json.dump(analysis_report, f, indent=2)
-            
-            # Create diff summary
-            diff_summary = {
-                "timestamp": datetime.now().isoformat(),
-                "operation": "plan_generation",
-                "files_created": ["_vsbvibe/plan.json", "_vsbvibe/seo_defaults.json", "_vsbvibe/analysis_report.json"],
-                "files_updated": [],
-                "summary": "Generated UI/UX plan, SEO defaults, and analysis report"
-            }
-            
-            diff_path = os.path.join(project_path, "_vsbvibe", "diff_summary.json")
-            with open(diff_path, 'w') as f:
-                json.dump(diff_summary, f, indent=2)
-            
-            # Update project status
-            project_config["status"] = "step2_complete"
-            project_config["updated_at"] = datetime.now().isoformat()
-            project_manager.save_project_config(project_config)
-            
-            log_user_action("plan_generated", {"site_mode": site_analysis["site_mode"]})
-            
-            st.success("✅ Plan generated successfully!")
-            
-    except Exception as e:
-        from core.errors import error_reporter
-        error_id = error_reporter.capture_error(e, {
-            "module": "step2",
-            "function": "_generate_plan_with_ai",
-            "has_openai_key": bool(st.secrets.get("openai_api_key"))
-        })
-        st.error(f"Error generating plan: {str(e)} (Error ID: {error_id})")
-
-@safe_component
-def _analyze_requirements_fallback(requirements: str) -> dict:
-    """Analyze requirements text to determine site characteristics"""
-    
-    req_lower = requirements.lower()
-    
-    # Detect site mode
-    ecommerce_keywords = ["shop", "store", "product", "buy", "sell", "cart", "checkout", "payment", "ecommerce", "e-commerce"]
-    is_ecommerce = any(keyword in req_lower for keyword in ecommerce_keywords)
-    
-    site_mode = "ecommerce" if is_ecommerce else "brochure"
-    
-    # Detect features
-    features = []
-    if any(word in req_lower for word in ["blog", "news", "article"]):
-        features.append("blog")
-    if any(word in req_lower for word in ["contact", "form", "inquiry"]):
-        features.append("contact")
-    if any(word in req_lower for word in ["search", "find", "filter"]):
-        features.append("search")
-    if any(word in req_lower for word in ["gallery", "portfolio", "showcase"]):
-        features.append("gallery")
-    if any(word in req_lower for word in ["testimonial", "review", "feedback"]):
-        features.append("testimonials")
-    
-    # Detect target audience
-    b2b_keywords = ["business", "enterprise", "corporate", "professional", "b2b"]
-    b2c_keywords = ["consumer", "customer", "personal", "individual", "b2c"]
-    
-    if any(keyword in req_lower for keyword in b2b_keywords):
-        target_audience = "business"
-    elif any(keyword in req_lower for keyword in b2c_keywords):
-        target_audience = "consumer"
-    else:
-        target_audience = "general"
-    
-    # Detect layout style
-    modern_keywords = ["modern", "clean", "minimal", "sleek"]
-    classic_keywords = ["traditional", "classic", "formal", "conservative"]
-    creative_keywords = ["creative", "artistic", "unique", "bold"]
-    
-    if any(keyword in req_lower for keyword in modern_keywords):
-        layout_style = "modern"
-    elif any(keyword in req_lower for keyword in classic_keywords):
-        layout_style = "classic"
-    elif any(keyword in req_lower for keyword in creative_keywords):
-        layout_style = "creative"
-    else:
-        layout_style = "modern"  # Default
-    
-    # Detect color scheme preference
-    if any(word in req_lower for word in ["professional", "corporate", "business"]):
-        color_scheme = "professional"
-    elif any(word in req_lower for word in ["vibrant", "colorful", "bright"]):
-        color_scheme = "vibrant"
-    elif any(word in req_lower for word in ["minimal", "clean", "simple"]):
-        color_scheme = "minimal"
-    else:
-        color_scheme = "professional"  # Default
-    
-    # Determine entities
-    entities = {
-        "products": is_ecommerce,
-        "blog": "blog" in features,
-        "contact": "contact" in features,
-        "gallery": "gallery" in features,
-        "testimonials": "testimonials" in features
-    }
-    
-    return {
-        "site_mode": site_mode,
-        "features": features,
-        "target_audience": target_audience,
-        "layout_style": layout_style,
-        "color_scheme": color_scheme,
-        "entities": entities
-    }
-
-@safe_component
-def _generate_pages_fallback(analysis: dict) -> list:
-    """Generate pages based on analysis"""
-    
-    pages = [
-        {
-            "name": "Home",
-            "slug": "/",
-            "type": "home",
-            "priority": 1,
-            "sections": ["hero", "features", "cta"]
-        }
-    ]
-    
-    # Add e-commerce pages if needed
-    if analysis["site_mode"] == "ecommerce":
-        pages.extend([
-            {
-                "name": "Shop",
-                "slug": "/shop",
-                "type": "product_list",
-                "priority": 2,
-                "sections": ["header", "filters", "product_grid", "pagination"]
-            },
-            {
-                "name": "Product",
-                "slug": "/product/[id]",
-                "type": "product_detail",
-                "priority": 3,
-                "sections": ["breadcrumb", "product_info", "gallery", "details", "related"]
-            }
-        ])
-    
-    # Add feature-based pages
-    if "blog" in analysis["features"]:
-        pages.append({
-            "name": "Blog",
-            "slug": "/blog",
-            "type": "blog",
-            "priority": 4,
-            "sections": ["header", "post_list", "sidebar"]
-        })
-    
-    if "contact" in analysis["features"]:
-        pages.append({
-            "name": "Contact",
-            "slug": "/contact",
-            "type": "contact",
-            "priority": 5,
-            "sections": ["header", "contact_form", "info", "map"]
-        })
-    
-    # Add about page for brochure sites
-    if analysis["site_mode"] == "brochure":
-        pages.append({
-            "name": "About",
-            "slug": "/about",
-            "type": "about",
-            "priority": 2,
-            "sections": ["header", "story", "team", "values"]
-        })
-    
-    return pages
-
-@safe_component
-def _generate_navigation(analysis: dict) -> dict:
-    """Generate navigation structure"""
-    
-    header_items = [
-        {"name": "Home", "url": "/", "type": "internal"}
-    ]
-    
-    if analysis["site_mode"] == "ecommerce":
-        header_items.append({"name": "Shop", "url": "/shop", "type": "internal"})
-    
-    if analysis["site_mode"] == "brochure":
-        header_items.append({"name": "About", "url": "/about", "type": "internal"})
-    
-    if "blog" in analysis["features"]:
-        header_items.append({"name": "Blog", "url": "/blog", "type": "internal"})
-    
-    if "contact" in analysis["features"]:
-        header_items.append({"name": "Contact", "url": "/contact", "type": "internal"})
-    
-    footer_items = [
-        {"name": "Privacy Policy", "url": "/privacy", "type": "internal"},
-        {"name": "Terms of Service", "url": "/terms", "type": "internal"}
-    ]
-    
-    return {
-        "header": header_items,
-        "footer": footer_items,
-        "mobile_menu": True,
-        "search": "search" in analysis["features"]
-    }
-
-def _generate_brand_tokens(analysis: dict, project_config: dict) -> dict:
-    """Generate brand tokens based on analysis"""
-    
-    # Color schemes
-    color_schemes = {
-        "professional": {"primary": "#2563eb", "secondary": "#64748b"},
-        "vibrant": {"primary": "#dc2626", "secondary": "#f59e0b"},
-        "minimal": {"primary": "#374151", "secondary": "#9ca3af"}
-    }
-    
-    colors = color_schemes.get(analysis["color_scheme"], color_schemes["professional"])
-    
-    # Font families
-    font_families = {
-        "modern": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
-        "classic": "Georgia, Times, serif",
-        "creative": "Poppins, -apple-system, BlinkMacSystemFont, sans-serif"
-    }
-    
-    font_family = font_families.get(analysis["layout_style"], font_families["modern"])
-    
-    return {
-        "primary_color": colors["primary"],
-        "secondary_color": colors["secondary"],
-        "accent_color": "#10b981",
-        "font_family": font_family,
-        "border_radius": "8px",
-        "spacing_unit": "1rem",
-        "created_at": datetime.now().isoformat()
-    }
-
-@safe_component
-def _generate_seo_defaults(project_config: dict, plan: dict) -> dict:
-    """Generate SEO defaults configuration"""
-    
-    return {
-        "json_ld": {
-            "organization": True,
-            "website": True,
-            "breadcrumbs": True,
-            "product": plan.get("site_mode") == "ecommerce"
-        },
-        "meta_defaults": {
-            "title_template": f"{project_config.get('company_name', 'Company')} - {{page_title}}",
-            "meta_description": f"Welcome to {project_config.get('company_name', 'our website')}",
-            "keywords": ["website", "business", project_config.get('company_name', 'company').lower()],
-            "og_image": "/assets/og-image.jpg",
-            "favicon": "/assets/favicon.ico"
-        },
-        "technical_seo": {
-            "sitemap": True,
-            "robots": True,
-            "canonical": True,
-            "structured_data": True
-        },
-        "performance": {
-            "lazy_loading": True,
-            "image_optimization": True,
-            "preconnect_hints": True,
-            "code_splitting": True
-        },
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-
-@safe_component
-def _generate_analysis_report(project_config: dict, analysis: dict, plan: dict) -> dict:
-    """Generate analysis report"""
-    
-    # Get requirements version
-    requirements_version = 1
-    versions_path = os.path.join(
-        project_config.get("local_folder", ""),
-        project_config.get("project_name", "").lower().replace(" ", "-"),
-        "_vsbvibe", "requirements_versions.json"
+def main():
+    st.set_page_config(
+        page_title="{company_name}",
+        page_icon="🚀",
+        layout="wide"
     )
     
-    if os.path.exists(versions_path):
-        try:
-            with open(versions_path, 'r') as f:
-                versions = json.load(f)
-                requirements_version = len(versions) + 1
-        except:
-            pass
+    render_navigation()
     
-    return {
-        "requirements_version": requirements_version,
-        "analysis_timestamp": datetime.now().isoformat(),
-        "rationale": {
-            "site_mode_reasoning": f"Detected '{analysis['site_mode']}' based on keywords in requirements",
-            "platform_selection": "streamlit_site chosen for rapid development and deployment",
-            "features_detected": analysis["features"],
-            "target_audience": analysis["target_audience"],
-            "design_decisions": {
-                "layout_style": analysis["layout_style"],
-                "color_scheme": analysis["color_scheme"],
-                "reasoning": "Based on industry keywords and target audience analysis"
+    st.title("Welcome to {company_name}")
+    st.write("Your website is ready!")
+
+if __name__ == "__main__":
+    main()
+'''
+    
+    @safe_component
+    def _generate_streamlit_page(self, page: Dict[str, Any]) -> str:
+        """Generate individual Streamlit page"""
+        
+        page_name = page.get("name", "Page")
+        page_type = page.get("type", "basic")
+        
+        return f'''"""
+{page_name} Page
+Generated by Vsbvibe
+"""
+
+import streamlit as st
+
+def main():
+    st.title("{page_name}")
+    
+    # Page content based on type: {page_type}
+    st.write("Content for {page_name.lower()} page will be generated here.")
+    
+    # Sections: {', '.join(page.get('sections', []))}
+
+if __name__ == "__main__":
+    main()
+'''
+    
+    @safe_component
+    def _generate_navigation_component(self) -> str:
+        """Generate navigation component"""
+        
+        nav_items = self.plan.get("navigation", {}).get("header", [])
+        
+        return f'''"""
+Navigation Component
+Generated by Vsbvibe
+"""
+
+import streamlit as st
+
+def render_navigation():
+    """Render site navigation"""
+    
+    with st.container():
+        cols = st.columns(len({nav_items}) + 1)
+        
+        with cols[0]:
+            st.markdown("**{self.project_config.get('company_name', 'Company')}**")
+        
+        # Navigation items: {nav_items}
+        for i, item in enumerate({nav_items}, 1):
+            with cols[i]:
+                st.markdown(f"[{{item.get('name', 'Link')}}]({{item.get('url', '/')}})")
+'''
+    
+    @safe_component
+    def _generate_seo_files(self, output_path: str) -> List[str]:
+        """Generate SEO files using safe builders"""
+        
+        files_created = []
+        
+        # Create public directory
+        public_dir = os.path.join(output_path, "_public")
+        ensure_directory(public_dir)
+        
+        # Generate sitemap.xml
+        pages = self.plan.get("pages", [])
+        routes = [page.get("slug", "/") for page in pages]
+        base_url = self.project_config.get("base_url", "")
+        
+        # Safe generation (no triple-quoted literals)
+        xml_content = _build_sitemap_xml(routes, base_url)
+        robots_txt = _build_robots_txt(base_url)
+        
+        sitemap_path = os.path.join(public_dir, "sitemap.xml")
+        robots_path = os.path.join(public_dir, "robots.txt")
+        
+        with open(sitemap_path, "w", encoding="utf-8") as f:
+            f.write(xml_content)
+        files_created.append("_public/sitemap.xml")
+        
+        with open(robots_path, "w", encoding="utf-8") as f:
+            f.write(robots_txt)
+        files_created.append("_public/robots.txt")
+        
+        return files_created
+    
+    @safe_component
+    def _generate_react_vite_scaffold(self) -> Dict[str, Any]:
+        """Generate React + Vite scaffold"""
+        
+        output_path = os.path.join(self.project_path, self.project_name, "output", "react_vite")
+        ensure_directory(output_path)
+        
+        files_created = []
+        
+        # Generate package.json
+        package_json = self._generate_package_json()
+        package_path = os.path.join(output_path, "package.json")
+        with open(package_path, 'w') as f:
+            f.write(package_json)
+        files_created.append("package.json")
+        
+        # Generate vite.config.js
+        vite_config = self._generate_vite_config()
+        vite_path = os.path.join(output_path, "vite.config.js")
+        with open(vite_path, 'w') as f:
+            f.write(vite_config)
+        files_created.append("vite.config.js")
+        
+        # Generate index.html
+        html_content = self._generate_react_index_html()
+        html_path = os.path.join(output_path, "index.html")
+        with open(html_path, 'w') as f:
+            f.write(html_content)
+        files_created.append("index.html")
+        
+        # Generate src directory
+        src_dir = os.path.join(output_path, "src")
+        ensure_directory(src_dir)
+        
+        # Generate App.jsx
+        app_content = self._generate_react_app()
+        app_path = os.path.join(src_dir, "App.jsx")
+        with open(app_path, 'w') as f:
+            f.write(app_content)
+        files_created.append("src/App.jsx")
+        
+        # Generate main.jsx
+        main_content = self._generate_react_main()
+        main_path = os.path.join(src_dir, "main.jsx")
+        with open(main_path, 'w') as f:
+            f.write(main_content)
+        files_created.append("src/main.jsx")
+        
+        # Generate CSS
+        css_content = self._generate_react_css()
+        css_path = os.path.join(src_dir, "App.css")
+        with open(css_path, 'w') as f:
+            f.write(css_content)
+        files_created.append("src/App.css")
+        
+        # Generate components
+        components_dir = os.path.join(src_dir, "components")
+        ensure_directory(components_dir)
+        
+        # Navigation component
+        nav_content = self._generate_react_navigation()
+        nav_path = os.path.join(components_dir, "Navigation.jsx")
+        with open(nav_path, 'w') as f:
+            f.write(nav_content)
+        files_created.append("src/components/Navigation.jsx")
+        
+        # Generate pages
+        pages_dir = os.path.join(src_dir, "pages")
+        ensure_directory(pages_dir)
+        
+        for page in self.plan.get("pages", []):
+            page_content = self._generate_react_page(page)
+            page_filename = f"{page.get('name', 'Page').replace(' ', '')}.jsx"
+            page_path = os.path.join(pages_dir, page_filename)
+            with open(page_path, 'w') as f:
+                f.write(page_content)
+            files_created.append(f"src/pages/{page_filename}")
+        
+        # Generate SEO files if enabled
+        if self.options.get("include_seo", True):
+            public_dir = os.path.join(output_path, "public")
+            ensure_directory(public_dir)
+            seo_files = self._generate_seo_files(output_path)
+            files_created.extend(seo_files)
+        
+        return {
+            "success": True,
+            "files_created": files_created,
+            "output_path": output_path
+        }
+    
+    @safe_component
+    def _generate_package_json(self) -> str:
+        """Generate package.json for React + Vite"""
+        
+        company_name = self.project_config.get("company_name", "Your Company")
+        project_name = self.project_config.get("project_name", "website").lower().replace(" ", "-")
+        
+        package_data = {
+            "name": project_name,
+            "private": True,
+            "version": "0.0.0",
+            "type": "module",
+            "scripts": {
+                "dev": "vite",
+                "build": "vite build",
+                "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+                "preview": "vite preview"
+            },
+            "dependencies": {
+                "react": "^18.2.0",
+                "react-dom": "^18.2.0",
+                "react-router-dom": "^6.8.0"
+            },
+            "devDependencies": {
+                "@types/react": "^18.2.43",
+                "@types/react-dom": "^18.2.17",
+                "@vitejs/plugin-react": "^4.2.1",
+                "eslint": "^8.55.0",
+                "eslint-plugin-react": "^7.33.2",
+                "eslint-plugin-react-hooks": "^4.6.0",
+                "eslint-plugin-react-refresh": "^0.4.5",
+                "vite": "^5.0.8"
             }
-        },
-        "plan_summary": {
-            "total_pages": len(plan.get("pages", [])),
-            "navigation_items": len(plan.get("navigation", {}).get("header", [])),
-            "entities_enabled": list(k for k, v in analysis["entities"].items() if v)
-        },
-        "next_steps": [
-            "Generate scaffold based on plan",
-            "Import content and data",
-            "Customize design and styling",
-            "Test and deploy"
-        ]
-    }
+        }
+        
+        return json.dumps(package_data, indent=2)
+    
+    @safe_component
+    def _generate_vite_config(self) -> str:
+        """Generate vite.config.js"""
+        
+        return """import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000,
+    open: true
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true
+  }
+})
+"""
+    
+    @safe_component
+    def _generate_react_index_html(self) -> str:
+        """Generate index.html for React app"""
+        
+        company_name = self.project_config.get("company_name", "Your Company")
+        
+        return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{company_name}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+"""
+    
+    @safe_component
+    def _generate_react_main(self) -> str:
+        """Generate main.jsx entry point"""
+        
+        return """import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App.jsx'
+import './App.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>,
+)
+"""
+    
+    @safe_component
+    def _generate_react_app(self) -> str:
+        """Generate main App.jsx component"""
+        
+        company_name = self.project_config.get("company_name", "Your Company")
+        pages = self.plan.get("pages", [])
+        
+        # Generate imports for pages
+        page_imports = []
+        routes = []
+        
+        for page in pages:
+            page_name = page.get('name', 'Page').replace(' ', '')
+            page_imports.append(f"import {page_name} from './pages/{page_name}'")
+            
+            slug = page.get('slug', '/')
+            if slug == '/':
+                routes.append(f'        <Route path="/" element={{{page_name} /}} />')
+            else:
+                routes.append(f'        <Route path="{slug}" element={{{page_name} /}} />')
+        
+        imports_str = '\n'.join(page_imports)
+        routes_str = '\n'.join(routes)
+        
+    @safe_component
+    def _generate_htmljs_scaffold(self) -> Dict[str, Any]:
+        """Generate HTML/JS static site scaffold"""
+        
+        output_path = os.path.join(self.project_path, self.project_name, "output", "htmljs")
+        ensure_directory(output_path)
+        
+        files_created = []
+        
+        # Generate index.html
+        html_content = self._generate_html_index()
+        html_path = os.path.join(output_path, "index.html")
+        with open(html_path, 'w') as f:
+            f.write(html_content)
+        files_created.append("index.html")
+        
+        # Generate CSS
+        css_dir = os.path.join(output_path, "css")
+        ensure_directory(css_dir)
+        
+        css_content = self._generate_main_css()
+        css_path = os.path.join(css_dir, "main.css")
+        with open(css_path, 'w') as f:
+            f.write(css_content)
+        files_created.append("css/main.css")
+        
+        # Generate JavaScript
+        js_dir = os.path.join(output_path, "js")
+        ensure_directory(js_dir)
+        
+        js_content = self._generate_main_js()
+        js_path = os.path.join(js_dir, "main.js")
+        with open(js_path, 'w') as f:
+            f.write(js_content)
+        files_created.append("js/main.js")
+        
+        return {
+            "success": True,
+            "files_created": files_created,
+            "output_path": output_path
+        }
+    
+    @safe_component
+    def _generate_html_index(self) -> str:
+        """Generate HTML index page"""
+        
+        company_name = self.project_config.get("company_name", "Your Company")
+        
+        return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{company_name}</title>
+    <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <h1>{company_name}</h1>
+        </nav>
+    </header>
+    
+    <main>
+        <section class="hero">
+            <h2>Welcome to {company_name}</h2>
+            <p>Your website is ready!</p>
+        </section>
+    </main>
+    
+    <script src="js/main.js"></script>
+</body>
+</html>'''
+    
+    @safe_component
+    def _generate_main_css(self) -> str:
+        """Generate main CSS file"""
+        
+        brand_tokens = self.plan.get("brand_tokens", {})
+        primary_color = brand_tokens.get("primary_color", "#2563eb")
+        font_family = brand_tokens.get("font_family", "Inter, sans-serif")
+        
+        return f'''/* Generated by Vsbvibe */
+
+* {{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}}
+
+body {{
+    font-family: {font_family};
+    line-height: 1.6;
+    color: #333;
+}}
+
+header {{
+    background: {primary_color};
+    color: white;
+    padding: 1rem 0;
+}}
+
+nav {{
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}}
+
+.hero {{
+    text-align: center;
+    padding: 4rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}}
+
+.hero h2 {{
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: {primary_color};
+}}
+'''
+    
+    @safe_component
+    def _generate_main_js(self) -> str:
+        """Generate main JavaScript file"""
+        
+        return '''// Generated by Vsbvibe
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Website loaded successfully!');
+    
+    // Add any interactive functionality here
+});
+'''
