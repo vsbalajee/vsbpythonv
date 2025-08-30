@@ -3,7 +3,6 @@ Routing and navigation logic for Vsbvibe application
 """
 
 import streamlit as st
-from typing import Dict, Any
 
 def handle_routing():
     """Main routing handler for the application"""
@@ -90,8 +89,6 @@ def render_sidebar_navigation():
         8. Optimize SEO
         9. Test everything
         10. Deploy live
-        11. Netlify Deployment
-        12. Digital Ocean Deployment
         """)
 
 def render_step1():
